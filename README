@@ -1,0 +1,23 @@
+This uses the Translation code from a defunct plugin at
+https://sites.google.com/site/kashmirplugins/home/translator.
+
+The YouTube trailer and search functionality has been removed (as it did
+not work, and other YT plugins exist).
+
+The code has been rationalized, and it should be (or will become)
+Python3 compatible.
+
+The entries here are:
+
+MakeHTML5Entities.pl
+    A script to create the HTML5Entities.py source from the full list of
+    HTML5 entities at w3.org.
+
+ipkg-build
+    An editied version of the ipkg-build script from the Vix opkg-tools
+    with a few modifications to make it a simple build script for this
+    package.
+    Just run it in this directory.
+
+README
+    This file.
