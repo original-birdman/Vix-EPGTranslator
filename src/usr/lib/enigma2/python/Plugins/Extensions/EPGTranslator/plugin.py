@@ -324,7 +324,10 @@ Menu : Setup
         before_trans = 'class="result-container">'
         request = Request(url, headers=agents)
         try:
-            output = urlopen(request, timeout=20).read()
+# Ensure the result is marked as utf-8 (Py2 needs it, Py3 doesn't, but
+# doesn't object to the usage).
+#
+            output = urlopen(request, timeout=20).read().decode('utf-8')
             data = output[output.find(before_trans) + len(before_trans):]
 # ...and we want everything up to the end of the div
 #
