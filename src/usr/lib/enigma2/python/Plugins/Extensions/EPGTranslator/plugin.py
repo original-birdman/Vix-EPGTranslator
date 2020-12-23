@@ -345,8 +345,9 @@ Menu : Setup
 # and display it
 #
     def translateText(self, text):
-        if text and text != '':
-            self.setTitle('Text Translator')
+        if not text or text == '':      # Don't do nothing
+            return
+        self.setTitle('Text Translator')
         newtext = self.get_translation(text)
         if self.showsource == 'yes':
             self['text'].setText(text)
@@ -359,15 +360,15 @@ Menu : Setup
 # and display it
 #
     def translateEPG(self, text):
-        if text and text != '':
-            self.setTitle('EPG Translator')
-            try:
-                begin = self.event.getBeginTimeString()
-                duration = '%d min' % (self.event.getDuration() / 60)
-            except:
-                begin = ''
-                duration = ''
-
+        if not text or text == '':      # Don't do nothing
+            return
+        self.setTitle('EPG Translator')
+        try:
+            begin = self.event.getBeginTimeString()
+            duration = '%d min' % (self.event.getDuration() / 60)
+        except:
+            begin = ''
+            duration = ''
         newtext = self.get_translation(text)
         newtext = re.sub('\n ', '\n', newtext)
         if self.refresh == False:
