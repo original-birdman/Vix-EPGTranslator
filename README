@@ -9,6 +9,9 @@ Python3 compatible.
 
 The entries here are:
 
+src/
+    The source files
+
 MakeHTML5Entities.pl
     A script to create the HTML5Entities.py source from the full list of
     HTML5 entities at w3.org.
@@ -19,5 +22,11 @@ ipkg-build
     package.
     Just run it in this directory.
 
+enigma2-plugin-extensions-translator_x.xx_all.ipk
+    A package packed by ipkg-build.
+    This will ONLY be packged before a commit to Master
+    it will NOT be updated for every Dev change made!!!
+
 README
     This file.
+
