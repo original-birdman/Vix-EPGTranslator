@@ -23,7 +23,7 @@ from Tools.Directories import fileExists
 
 from twisted.web.client import getPage
 
-import socket, sys, re
+import socket, sys, re, time
 
 # Imports and defs which are version-dependent
 #
@@ -364,8 +364,8 @@ Menu : Setup
             return
         self.setTitle('EPG Translator')
         try:
-            begin = self.event.getBeginTimeString()
-            duration = '%d min' % (self.event.getDuration() / 60)
+            begin=time.strftime('%Y-%m-%d %H:%M', time.localtime(int(self.event[4])))
+            duration = "%d min" % (int(self.event[5]) / 60)
         except:
             begin = ''
             duration = ''
@@ -388,39 +388,59 @@ Menu : Setup
         self.max = 1
         self.count = 0
         self.list = []
-        self.epgcache = eEPGCache.getInstance()
-        ref = self.session.nav.getCurrentlyPlayingServiceReference()
+        epgcache = eEPGCache.getInstance()
         service = self.session.nav.getCurrentService()
         info = service.info()
         curEvent = info.getEvent(0)
         if curEvent:
-            self.list.append(curEvent)
-            self.epgcache.startTimeQuery(eServiceReference(ref.toString()), curEvent.getBeginTime() + curEvent.getDuration())
-            i = 1
-            while i <= int(config.plugins.translator.maxevents.value):
-                event = self.epgcache.getNextTimeEntry()
-                if event is not None:
-                    self.list.append(event)
-                i += 1
-
+# We'll get the same EPG as would be displayed - so we start at
+# config.epg.histminutes before now
+# Do we actually need to limit the entry count at all???
+# Could we just remember everything we get?
+#
+            t_now = int(time.time())
+            epg_base = t_now - 60*int(config.epg.histminutes.value)
+            epg_extent = 86400*14   # 14 days later
+            ref = self.session.nav.getCurrentlyPlayingServiceReference()
+            test = [ 'XRnITBDSE', (ref.toString(), 0, epg_base, epg_extent) ]
+            epg_data = epgcache.lookupEvent(test)
+# Copy over only up to the maximum requested...
+# The 'XRnITBDSE' (well, not the X) determines the order of data in the
+# returned list items (see lib/dvb/epgcache.cpp).
+#
+# 0   R = Service Reference
+# 1   n = Short Service Name
+# 2   I = Event Id
+# 3   T = Event Title
+# 4   B = Event Begin Time
+# 5   D = Event Duration
+# 6   S = Event Short Description
+# 7   E = Event Extended Description
+#
+            self.list = epg_data[:int(config.plugins.translator.maxevents.value)]
             self.max = len(self.list)
+# Set the starting point to the currently running service, which will be
+# the last one before one with a future starting time
+#
+            self.count = 0      # In case we don't find one...
+            for i in range(1,len(self.list)):
+                if self.list[i][4] > t_now: break
+                self.count = i
         self.showEPG()
         return
 
     def showEPG(self):
         try:
             self.event = self.list[self.count]
-            self.eventName = self.event.getEventName()
-            text = self.eventName
-            short = self.event.getShortDescription()
-            ext = self.event.getExtendedDescription()
+            text=self.event[3]
+            short=self.event[6]
+            ext=self.event[7]
             self.refresh = False
         except:
             text = 'Press red button to refresh EPG'
             short = ''
             ext = ''
             self.refresh = True
-
         if short and short != text:
             text += '\n\n' + short
         if ext:
