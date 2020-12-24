@@ -451,14 +451,16 @@ Menu : Setup
 
     def leftUp(self):
         self.count -= 1
+# Don't wrap....
         if self.count == -1:
-            self.count = self.max - 1
+            self.count = 0
         self.showEPG()
 
     def rightDown(self):
         self.count += 1
+# Don't wrap....
         if self.count == self.max:
-            self.count = 0
+            self.count = self.max - 1
         self.showEPG()
 
     def up(self):
