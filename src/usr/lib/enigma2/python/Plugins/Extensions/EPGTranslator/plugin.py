@@ -42,6 +42,23 @@ else:
 #
     def dec2utf8(n):         return chr(n)
 
+# Useful constants for EPG fetching.
+#
+#   B = Event Begin Time
+#   D = Event Duration
+#   T = Event Title
+#   S = Event Short Description
+#   E = Event Extended Description
+
+EPG_OPTIONS = 'BDTSEX'  # X MUST be last to keep index correct!!!
+
+# Now split this into mnemonc indices.
+# Then we can use epg_T etc... and means that any change to EPG_OPTIONS
+# is automatically handled
+#
+for i in range(len(EPG_OPTIONS)):
+    exec("epg_%s = %d" % (EPG_OPTIONS[i], i))
+
 # Translate HTML Entities (&xxx;) in text
 # The standard python name2codepoint (in htmlentitydefs for py2,
 # html.entities for py3) is incomplete, so we'll use a complete
@@ -364,8 +381,8 @@ Menu : Setup
             return
         self.setTitle('EPG Translator')
         try:
-            begin=time.strftime('%Y-%m-%d %H:%M', time.localtime(int(self.event[4])))
-            duration = "%d min" % (int(self.event[5]) / 60)
+            begin=time.strftime('%Y-%m-%d %H:%M', time.localtime(int(self.event[epg_B])))
+            duration = "%d min" % (int(self.event[epg_D]) / 60)
         except:
             begin = ''
             duration = ''
@@ -388,7 +405,6 @@ Menu : Setup
         self.max = 1
         self.count = 0
         self.list = []
-        epgcache = eEPGCache.getInstance()
         service = self.session.nav.getCurrentService()
         info = service.info()
         curEvent = info.getEvent(0)
@@ -402,20 +418,11 @@ Menu : Setup
             epg_base = t_now - 60*int(config.epg.histminutes.value)
             epg_extent = 86400*14   # 14 days later
             ref = self.session.nav.getCurrentlyPlayingServiceReference()
-            test = [ 'XRnITBDSE', (ref.toString(), 0, epg_base, epg_extent) ]
+            test = [ EPG_OPTIONS, (ref.toString(), 0, epg_base, epg_extent) ]
+            epgcache = eEPGCache.getInstance()
             epg_data = epgcache.lookupEvent(test)
 # Copy over only up to the maximum requested...
-# The 'XRnITBDSE' (well, not the X) determines the order of data in the
 # returned list items (see lib/dvb/epgcache.cpp).
-#
-# 0   R = Service Reference
-# 1   n = Short Service Name
-# 2   I = Event Id
-# 3   T = Event Title
-# 4   B = Event Begin Time
-# 5   D = Event Duration
-# 6   S = Event Short Description
-# 7   E = Event Extended Description
 #
             self.list = epg_data[:int(config.plugins.translator.maxevents.value)]
             self.max = len(self.list)
@@ -424,7 +431,7 @@ Menu : Setup
 #
             self.count = 0      # In case we don't find one...
             for i in range(1,len(self.list)):
-                if self.list[i][4] > t_now: break
+                if self.list[i][epg_B] > t_now: break
                 self.count = i
         self.showEPG()
         return
@@ -432,9 +439,9 @@ Menu : Setup
     def showEPG(self):
         try:
             self.event = self.list[self.count]
-            text=self.event[3]
-            short=self.event[6]
-            ext=self.event[7]
+            text=self.event[epg_T]
+            short=self.event[epg_S]
+            ext=self.event[epg_E]
             self.refresh = False
         except:
             text = 'Press red button to refresh EPG'

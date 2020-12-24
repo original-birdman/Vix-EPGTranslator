@@ -5,3 +5,30 @@ Added files to the git repository.
 Added build ipk package for 2.0
 
 ========== 2.0+ipk [21 Dec 2020]
+
+README + Dev branch
+    Added Dev branch and updated README to mention it
+
+plugin.py
+    Added ".decode('utf-8')" to urlopen() call. Needed for Py3, and
+    missed on copying in from test code.
+    Added plugin-source symlink for easier access to source files.
+
+plugin.py
+    Change the test for "no text" in translateText() and translateEPG()
+    and correct the (previously wrong) indentation in the latter.
+
+plugin.py
+    Switch to using epgcache.lookupEvent() to get events (based on EPG
+    TranslatorLite.
+    Get the EPG starting from the normal histminutes previous, rather
+    than just getting all EPG entries (which can go back well beyond
+    that). Then start with the current event.
+
+plugin.py
+    Switch off wrapping at the beginning and end of the displayed list.
+
+plugin.py
+    Change the returns list for epgcache.lookupEvent() to be only those
+    used, and parametrize the handling to robustify any additions or
+    changes.

@@ -17,14 +17,14 @@ MakeHTML5Entities.pl
     HTML5 entities at w3.org.
 
 ipkg-build
-    An editied version of the ipkg-build script from the Vix opkg-tools
+    An edited version of the ipkg-build script from the Vix opkg-tools
     with a few modifications to make it a simple build script for this
     package.
     Just run it in this directory.
 
 enigma2-plugin-extensions-translator_x.xx_all.ipk
     A package packed by ipkg-build.
-    This will ONLY be packged before a commit to Master
+    This will ONLY be packaged before a commit to Master
     it will NOT be updated for every Dev change made!!!
 
 README
