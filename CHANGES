@@ -32,3 +32,7 @@ plugin.py
     Change the returns list for epgcache.lookupEvent() to be only those
     used, and parametrize the handling to robustify any additions or
     changes.
+
+plugin.py
+    Cache the EPG translations, so that we don't need to redo the web
+    call on a return to a previously-seen item.

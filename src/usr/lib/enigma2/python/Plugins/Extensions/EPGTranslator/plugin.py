@@ -49,8 +49,10 @@ else:
 #   T = Event Title
 #   S = Event Short Description
 #   E = Event Extended Description
+#   I = Event Id
+#   N = Service Name
 
-EPG_OPTIONS = 'BDTSEX'  # X MUST be last to keep index correct!!!
+EPG_OPTIONS = 'BDTSEINX'    # X MUST be last to keep index correct!!!
 
 # Now split this into mnemonc indices.
 # Then we can use epg_T etc... and means that any change to EPG_OPTIONS
@@ -257,6 +259,7 @@ Menu : Setup
         self.max = 1
         self.count = 0
         self.list = []
+        self.translations = {}
         self.eventName = ''
         self['flag'] = Pixmap()
         self['flag2'] = Pixmap()
@@ -376,7 +379,7 @@ Menu : Setup
 # Translate the text of an EPG description
 # and display it
 #
-    def translateEPG(self, text):
+    def translateEPG(self, text, do_translate=True):
         if not text or text == '':      # Don't do nothing
             return
         self.setTitle('EPG Translator')
@@ -386,7 +389,15 @@ Menu : Setup
         except:
             begin = ''
             duration = ''
-        newtext = self.get_translation(text)
+        if do_translate:
+            newtext = self.get_translation(text)
+            try:
+                uref = str(self.event[epg_I]) + ":" + self.event[epg_N]
+                self.translations[uref] = newtext
+            except:
+                pass
+        else:
+            newtext = text
         newtext = re.sub('\n ', '\n', newtext)
         if self.refresh == False:
             newtext = begin + '\n\n' + newtext + '\n\n' + duration
@@ -439,6 +450,13 @@ Menu : Setup
     def showEPG(self):
         try:
             self.event = self.list[self.count]
+# If we already have the translation, just use it.
+#
+            uref = str(self.event[epg_I]) + ":" + self.event[epg_N]
+            if uref in self.translations:
+                self.translateEPG(str(self.translations[uref]), do_translate=False)
+                self.refresh = False
+                return
             text=self.event[epg_T]
             short=self.event[epg_S]
             ext=self.event[epg_E]
