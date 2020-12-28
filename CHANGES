@@ -40,3 +40,7 @@ plugin.py
 plugin.py
     Move the text translaton call into a stand-alone DO_translation()
     function so that it may be called from anywhere.
+
+plugin.py
+    Add code to intercept EventView pop-ups and add translations there
+    toggled by the Text key.

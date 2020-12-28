@@ -422,7 +422,7 @@ Menu : Setup
             self['text'].setText(newtext)
             self['text2'].hide()
 
-# Populate the EPG data in self.list form the box's EPG cache
+# Populate the EPG data in self.list from the box's EPG cache
 #
     def getEPG(self):
         self.max = 1
@@ -556,65 +556,143 @@ Menu : Setup
         self.close()
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+# Code to link into EventView windows to allow thme to be translated by
+# pressing the Text key.
 #
 from Screens.EventView import EventViewBase
 
+orig_EVB__init__ = None
+orig_EVB_setEvent = None
+orig_EPGSel__init__ = None
+
+# Start-up link (see PluginDescriptor defs)
+# This gets the current EventViewBase.__init__, saves it (so it can
+# still be called) and replaces it with my "added-handler".
+#
 def autostart(reason, **kwargs):
-    global newEventViewBase__init__
-    global newEPGSelection__init__
-    newEventViewBase__init__ = EventViewBase.__init__
-    EventViewBase.__init__ = EventViewBase__init__
-    EventViewBase.translateEPG = translateEPG
-    newEPGSelection__init__ = EPGSelection.__init__
+    global orig_EVB__init__, orig_EVB_setEvent, orig_EPGSel__init__
+    orig_EVB__init__ = EventViewBase.__init__
+    EventViewBase.__init__ = My_EVB__init__
+    orig_EPGSel__init__ = EPGSelection.__init__
     try:
         check = EPGSelection.setPiPService
-        EPGSelection.__init__ = EPGSelectionVTi__init__
+        EPGSelection.__init__ = My_EPGSelVTi__init__
     except AttributeError:
         try:
             check = EPGSelection.togglePIG
-            EPGSelection.__init__ = EPGSelectionATV__init__
+            EPGSelection.__init__ = My_EPGSelATV__init__
         except AttributeError:
             try:
                 check = EPGSelection.runPlugin
-                EPGSelection.__init__ = EPGSelectionPLI__init__
+                EPGSelection.__init__ = My_EPGSelPLI__init__
             except AttributeError:
-                EPGSelection.__init__ = EPGSelection__init__
+                EPGSelection.__init__ = My_EPGSel__init__
 
-def EventViewBase__init__(self, Event, Ref, callback = None, similarEPGCB = None):
-    newEventViewBase__init__(self, Event, Ref, callback, similarEPGCB)
+# Code to toggle whether we are translating.
+# Bound to Text in any EventView screen.
+#
+EPG_translating = False
+EPG_lastevent = None
 
-def EPGSelection__init__(self, session, service, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None):
-    newEPGSelection__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB)
+def EPG_ToggleMode():
+    global EPG_translating
+    EPG_translating = not EPG_translating
+# We need to update the event text - its translation state has changed.
+#
+    My_setEvent(EPG_lastevent)
 
-def EPGSelectionVTi__init__(self, session, service, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, isEPGBar = None, switchBouquet = None, EPGNumberZap = None, togglePiP = None):
-    newEPGSelection__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, isEPGBar, switchBouquet, EPGNumberZap, togglePiP)
+# The code to handle the text that will be displayed.
+# This is an extention of the EventViewbase.setEvent().
+#
+orig_setEvent = None
 
-def EPGSelectionATV__init__(self, session, service = None, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, EPGtype = None, StartBouquet = None, StartRef = None, bouquets = None):
-    newEPGSelection__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, EPGtype, StartBouquet, StartRef, bouquets)
+def My_setEvent(event):
+    global orig_setEvent, EPG_lastevent
 
-def EPGSelectionPLI__init__(self, session, service = None, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, parent = None):
-    newEPGSelection__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, parent)
+# First, call the original code
+#
+    orig_setEvent(event)
 
-def translateEPG(self):
-    if self.event:
-        text = self.event.getEventName()
-        short = self.event.getShortDescription()
-        ext = self.event.getExtendedDescription()
-        if short and short != text:
-            text += '\n\n' + short
-        if ext:
-            if text:
-                text += '\n\n'
-            text += ext
-        self.session.open(translatorMain, text)
+# Remember this event, so that EPG_ToggleMode() can call us again with
+# the same event info after a Text press.
+#
+    EPG_lastevent = event
+    if EPG_translating:
 
+# If we are now translating we need to change the text which the
+# orig_setEvent() call above has set.
+# We duplicate the login from the end of EventViewbase.setEvent() to get
+# the new texts to set.
+#
+        text = event.getEventName()
+        short = event.getShortDescription()
+        extended = event.getExtendedDescription()
+
+        if short == text:
+            short = ""
+        if short and extended:
+            extended = short + '\n' + extended
+        elif short:
+            extended = short
+# Need to cache the result and re-use it if we have it...
+#
+        newtext = DO_translation(extended,
+            str(config.plugins.translator.source.value),
+            str(config.plugins.translator.destination.value)
+        )
+        EVB_inst["FullDescription"].setText(newtext)
+        EVB_inst["summary_description"].setText(newtext)
+
+# The code to add my extensions to EventViewBase.__init__()
+#
+EVB_inst = None
+
+def My_EVB__init__(self, Event, Ref, callback = None, similarEPGCB = None):
+    global EVB_inst, EPG_translating
+    global orig_EVB__init__, orig_setEvent
+
+# First, call the original code, and remember the instance that called
+# here.
+#
+    orig_EVB__init__(self, Event, Ref, callback, similarEPGCB)
+    EVB_inst = self
+
+# Add the bits to get a Text key handler for EventViewBase
+# We create our own ActionMap. The VirtualKeyboardActions contexts only
+# defines a Text key (convenient!) and calls it "showVirtualKeyboard".
+#
+    which= "EPGTrans"
+    self[which] = ActionMap(["VirtualKeyboardActions"],
+           {"showVirtualKeyboard": EPG_ToggleMode}, -1)
+    self[which].setEnabled(True)
+# Now set us to not-translting, trap the setEvent() from self and
+# install my own handler
+#
+    EPG_translating = False
+    orig_setEvent = self.setEvent
+    self.setEvent = My_setEvent
+
+
+def My_EPGSel__init__(self, session, service, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None):
+    orig_EPGSel__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB)
+
+def My_EPGSelVTi__init__(self, session, service, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, isEPGBar = None, switchBouquet = None, EPGNumberZap = None, togglePiP = None):
+    orig_EPGSel__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, isEPGBar, switchBouquet, EPGNumberZap, togglePiP)
+
+def My_EPGSelATV__init__(self, session, service = None, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, EPGtype = None, StartBouquet = None, StartRef = None, bouquets = None):
+    orig_EPGSel__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, EPGtype, StartBouquet, StartRef, bouquets)
+
+def My_EPGSelPLI__init__(self, session, service = None, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, parent = None):
+    orig_EPGSel__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, parent)
 
 def main(session, **kwargs):
     session.open(translatorMain, None)
     return
 
-
 def Plugins(**kwargs):
-    return [PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_PLUGINMENU], icon='plugin.png', fnc=main),
+    return [
+     PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_PLUGINMENU], icon='plugin.png', fnc=main),
      PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_EXTENSIONSMENU], fnc=main),
-     PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_EVENTINFO], fnc=main)]
+     PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_EVENTINFO], fnc=main),
+     PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_AUTOSTART], fnc=autostart)
+    ]
