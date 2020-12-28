@@ -36,3 +36,7 @@ plugin.py
 plugin.py
     Cache the EPG translations, so that we don't need to redo the web
     call on a return to a previously-seen item.
+
+plugin.py
+    Move the text translaton call into a stand-alone DO_translation()
+    function so that it may be called from anywhere.

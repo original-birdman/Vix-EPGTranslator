@@ -13,7 +13,6 @@ from Components.Pixmap import Pixmap
 from Components.ScrollLabel import ScrollLabel
 from enigma import eEPGCache, eServiceReference, getDesktop
 from Plugins.Plugin import PluginDescriptor
-from Screens.EventView import EventViewBase
 from Screens.EpgSelection import EPGSelection
 from Screens.InfoBar import InfoBar
 from Screens.MessageBox import MessageBox
@@ -54,7 +53,7 @@ else:
 
 EPG_OPTIONS = 'BDTSEINX'    # X MUST be last to keep index correct!!!
 
-# Now split this into mnemonc indices.
+# Now split this into mnemonic indices.
 # Then we can use epg_T etc... and means that any change to EPG_OPTIONS
 # is automatically handled
 #
@@ -84,10 +83,52 @@ def transHTMLEnts(text):
 
     return str(text)
 
+# The routine to actually translate the text.
+# This is not an object method, so that it can be called from "anywhere"
+#
 dflt_UA = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:83.0) Gecko/20100101 Firefox/83.0'
 
-config.plugins.translator = ConfigSubsection()
+# This routine expects to get normal ("raw") text and will return the
+# same.
+# So it knows about URL encoding and HTMLEntity translation, so that the
+# callers do not need to.
+#
+def DO_translation(text, source, dest):
+# We need to url-encode the text (so "quote" is a misnamed function).
+#
+    text = quote(text)
+# The /m url produces a smaller result to the "full" (/) page.
+# It also (more importantly) actually returns the translated text!
+#
+    url = 'https://translate.google.com/m?&sl=%s&tl=%s&q=%s' % (source, dest, text)
+    agents = {'User-Agent': dflt_UA}
+# We'll extract the result from the returned web-page
+# This is currently (07 Dec 2020) in a div with its last item making it
+# a result-container...
+#
+    before_trans = 'class="result-container">'
+    request = Request(url, headers=agents)
+    try:
+# Ensure the result is marked as utf-8 (Py2 needs it, Py3 doesn't, but
+# doesn't object to the usage).
+#
+        output = urlopen(request, timeout=20).read().decode('utf-8')
+        data = output[output.find(before_trans) + len(before_trans):]
+# ...and we want everything up to the end of the div
+#
+        newtext = data.split('</div>')[0]
+        newtext = transHTMLEnts(newtext)
+    except URLError as e:
+        newtext = 'URL Error: ' + str(e.reason)
+    except HTTPError as e:
+        newtext = 'HTTP Error: ' + str(e.code)
+    except socket.error as e:
+        newtext = 'Socket Error: ' + str(e)
+    return newtext
 
+# -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+# Our classes
+#
 # The list of available languages
 #
 langs =  [
@@ -146,6 +187,7 @@ langs =  [
 
 # Source has an auto option in first place on the list
 #
+config.plugins.translator = ConfigSubsection()
 config.plugins.translator.source = ConfigSelection(default='auto',
  choices=[ ( 'auto', _('Detect Language')) ] + langs[:] )
 
@@ -301,7 +343,6 @@ Menu : Setup
                 self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
 
     def onLayoutFinished(self):
-
         source = '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + self.source + '.png'
         destination = '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + self.destination + '.png'
         if self.showsource == 'yes':
@@ -322,44 +363,13 @@ Menu : Setup
 # We are allowed to force the source or destination language...
 #
     def get_translation(self, text, from_lg=None, to_lg=None):
-
-# We need to url-encode this text (so "quote" is a misnamed function).
-#
-        text = quote(text)
         if len(text) > 2000:
             text = text[0:2000]
         if from_lg != None: source = from_lg
         else:               source = self.source
         if to_lg != None:   dest = to_lg
         else:               dest = self.destination
-# The /m url produces a smaller result to the "full" (/) page.
-# It also (more importantly) actually returns the translated text!
-#
-        url = 'https://translate.google.com/m?&sl=%s&tl=%s&q=%s' % (source, dest, text)
-        agents = {'User-Agent': dflt_UA}
-# We'll extract the result from the returned web-page
-# This is currently (07 Dec 2020) in a div with its last item making it
-# a result-container...
-#
-        before_trans = 'class="result-container">'
-        request = Request(url, headers=agents)
-        try:
-# Ensure the result is marked as utf-8 (Py2 needs it, Py3 doesn't, but
-# doesn't object to the usage).
-#
-            output = urlopen(request, timeout=20).read().decode('utf-8')
-            data = output[output.find(before_trans) + len(before_trans):]
-# ...and we want everything up to the end of the div
-#
-            newtext = data.split('</div>')[0]
-            newtext = transHTMLEnts(newtext)
-        except URLError as e:
-            newtext = 'URL Error: ' + str(e.reason)
-        except HTTPError as e:
-            newtext = 'HTTP Error: ' + str(e.code)
-        except socket.error as e:
-            newtext = 'Socket Error: ' + str(e)
-        return newtext
+        return DO_translation(text, source, dest)
 
 # Translate the text (entered via a VirtualKeyboard)
 # and display it
@@ -412,6 +422,8 @@ Menu : Setup
             self['text'].setText(newtext)
             self['text2'].hide()
 
+# Populate the EPG data in self.list form the box's EPG cache
+#
     def getEPG(self):
         self.max = 1
         self.count = 0
@@ -447,6 +459,8 @@ Menu : Setup
         self.showEPG()
         return
 
+# Get the (translated) EPG text to show
+#
     def showEPG(self):
         try:
             self.event = self.list[self.count]
@@ -508,7 +522,7 @@ Menu : Setup
 
     def showHelp(self):
 # Display the help in the current environment and destination language
-# (but only once if these are the same text)
+# (but only show once if these are the same text)
 # Use our translation code to get this from the English
 #
         env_lang = language.getLanguage()[:2]
@@ -543,6 +557,8 @@ Menu : Setup
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 #
+from Screens.EventView import EventViewBase
+
 def autostart(reason, **kwargs):
     global newEventViewBase__init__
     global newEPGSelection__init__
