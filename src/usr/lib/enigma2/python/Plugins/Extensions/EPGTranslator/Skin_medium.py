@@ -1,4 +1,4 @@
-# Skin data for screenwidth > 1280  
+# Skin data for screenwidth > 1280
 # Only contains "class" data.  No instance data
 #
 
@@ -28,7 +28,8 @@ class MySkinData:
         <screen position="center,120" size="1500,915" title="EPG Translator">
             <ePixmap position="0,0" size="1500,75" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/fhd-translator.png" alphatest="blend" zPosition="1" />
             <ePixmap position="15,9" size="54,54" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/buttons/fhd-blue.png" alphatest="blend" zPosition="2" />
-            <widget name="label" position="51,9" size="300,60" font="Regular;36" foregroundColor="#697178" backgroundColor="#FFFFFF" halign="left" transparent="1" zPosition="2" />
+            <widget name="label" position="51,9" size="300,30" font="Regular;24" foregroundColor="#697178" backgroundColor="#FFFFFF" halign="left" transparent="1" zPosition="2" />
+            <widget name="label2" position="51,39" size="300,30" font="Regular;24" foregroundColor="#697178" backgroundColor="#FFFFFF" halign="left" transparent="1" zPosition="2" />
             <widget render="Label" source="global.CurrentTime" position="1110,0" size="360,75" font="Regular;36" foregroundColor="#697178" backgroundColor="#FFFFFF" halign="right" valign="center" zPosition="2">
             <convert type="ClockToText">Format:%H:%M:%S</convert>
             </widget>

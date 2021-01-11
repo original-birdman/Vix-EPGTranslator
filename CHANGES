@@ -44,3 +44,23 @@ plugin.py
 plugin.py
     Add code to intercept EventView pop-ups and add translations there
     toggled by the Text key.
+
+========== 2.01-rc1 [11 Jan 2021]
+
+
+AutoflushCache.py
+    Added code to handle cacheing the translations. In its own class.
+
+Skin_medium.py, Skin_small.py
+    (Re)added the label2 item for the Read, clear-cache button
+
+plugin.py
+    Change the User-Agent string to be "EPG Translator" based.
+    Remember all events, not just a (configurable) number.
+    Re-ordered some code.
+    Added cacheing of translated text.
+    Add configurable cacheing timeout.
+    Add red-button handling to clear cache.
+    Add handling of translations for EventView items using the Text
+    button as a toggle.
+    Removed My_EPGSel* functions.
