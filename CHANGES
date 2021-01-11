@@ -64,3 +64,6 @@ plugin.py
     Add handling of translations for EventView items using the Text
     button as a toggle.
     Removed My_EPGSel* functions.
+
+*-2.01-rc1.ipk
+    Built....
