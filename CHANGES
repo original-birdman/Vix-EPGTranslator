@@ -67,3 +67,10 @@ plugin.py
 
 *-2.01-rc1.ipk
     Built....
+
+========== 2.01-rc2 [13 Jan 2021]
+
+Skin_medium.py
+Skin_small.py
+    Enlarged the translatorConfig screen.
+    Added the (forgotten) yellow image back to translatorMain.
