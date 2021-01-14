@@ -93,3 +93,9 @@ README
 
 *-2.01-rc2.ipk
     Built 2.01-rc2.ipk.  2.01-rc1.ipk removed.
+
+========== 2.01-rc3
+
+Skin_medium.py
+Skin_small.py
+    Fixed some minor separator geometry issues.
