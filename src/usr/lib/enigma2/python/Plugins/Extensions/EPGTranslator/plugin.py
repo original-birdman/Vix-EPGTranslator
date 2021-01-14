@@ -3,7 +3,7 @@
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.0-rc2"
+EPGTrans_vers = "2.0-rc3"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
@@ -302,6 +302,21 @@ class translatorConfig(ConfigListScreen, Screen):
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 #
+prop_patt = """
+(.*?)                       # The real description
+\s*                         # Optional whitespace
+(                           # Start all [] groups saving
+ (?:\[                      # Start a group
+  (?:[^,]{1,3},)*           # Leading tags (trailing ,)
+  (?:[^,]{1,3})             # final tag (no ,)
+  \]\s*                     # end a prop
+ )*                         # end a group - and repeat
+)                           # End all [] groups saving
+\s*$                        # to EOL and RE options
+"""
+
+prop_matcher = re.compile(prop_patt, flags=re.X)
+
 class translatorMain(Screen):
 
 # Create the helptext as a class variable
@@ -486,7 +501,21 @@ Red: Refresh EPG
                 uref = make_uref(self.event[epg_I], self.event[epg_N])
                 newtext = AfCache.fetch(uref)
                 if newtext == None:    # Not there...
-# Work out the timeout for the result.
+# We need to translate the description.
+# Some descriptions (e.g. UK Freeview) can contain "properties" in [] at
+# the end.  And so [S,AD] (subtitles, audio-description) end up being
+# translated (for en -> de) as [TRAURIG].
+# So strip any such trailers before sending for translation then append
+# them to the result.
+# We use a regex to match the two groups. The Pythin documentation
+# for a multi-group match makes no sense. This is what seems to work....
+#
+                    (desc, prop) = re.findall(prop_matcher, text)[0]
+                    newtext = self.get_translation(desc)
+                    if prop != "":
+                        newtext += " " + prop
+
+# Work out a timeout for the result.
 # If we have a specific timeout (in hours) use it, but if this is 0 set
 # the timeout to when the programme will leave the EPG
 # But even a specific timeout should not extend beyond programme
@@ -500,7 +529,6 @@ Red: Refresh EPG
                     if CfgPlTr.timeout_hr.value > 0:
                         limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
                         if limit < to:  to = limit
-                    newtext = self.get_translation(text)
                     AfCache.add(uref, newtext, abs_timeout=to)
         else:
             newtext = text

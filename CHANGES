@@ -99,3 +99,8 @@ README
 Skin_medium.py
 Skin_small.py
     Fixed some minor separator geometry issues.
+
+plugin.py
+    Removed [..] trailing props before sending them for translation, and
+    add them back afterwards for display.
+    Prevents en -> de changing [S,AD] to [TRAURIG]
