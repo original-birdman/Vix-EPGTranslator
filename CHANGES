@@ -74,3 +74,16 @@ Skin_medium.py
 Skin_small.py
     Enlarged the translatorConfig screen.
     Added the (forgotten) yellow image back to translatorMain.
+
+plugin.py
+    Add lang_flag() function, just to have only one place that knows how
+    to form the pathnames.
+    Don't add ch+/ (or rather "nextBouquet" and "prevBouquet") button
+    bindings if we are viewing a recording, not </>.
+    Use a ServiceEventTracker to call getEPG on service (channel)
+    changes rather than doing this in zapUp/zapDown..  This means we
+    don't try until the new channel is actually tuned it, and so works
+    even when a timeshift is running (the user may be prompted before
+    anything happens).
+    Handle viewing a playback of a recording by creating a hand-crafted
+    EPG with one entry.

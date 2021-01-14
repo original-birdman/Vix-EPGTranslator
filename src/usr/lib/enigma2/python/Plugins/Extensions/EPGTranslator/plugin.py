@@ -3,7 +3,7 @@
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.0-rc1"
+EPGTrans_vers = "2.0-rc2"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
@@ -12,7 +12,8 @@ from Components.Label import Label
 from Components.Language import language
 from Components.Pixmap import Pixmap
 from Components.ScrollLabel import ScrollLabel
-from enigma import eEPGCache, eServiceReference, getDesktop
+from Components.ServiceEventTracker import ServiceEventTracker
+from enigma import eEPGCache, eServiceReference, getDesktop, iPlayableService
 from Plugins.Plugin import PluginDescriptor
 from Screens.EpgSelection import EPGSelection
 from Screens.EventView import EventViewBase
@@ -250,6 +251,9 @@ def make_uref(sv_id, sv_name, lang=None):
         lang=CfgPlTr.destination.value
     return ":".join([lang, str(sv_id), str(sv_name)])
 
+def lang_flag(lang):    # Where the language images are
+    return '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + lang  + '.png'
+
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 # Our classes
 #
@@ -276,7 +280,7 @@ class translatorConfig(ConfigListScreen, Screen):
         self.onLayoutFinish.append(self.UpdateComponents)
 
     def UpdateComponents(self):
-        png = '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + str(CfgPlTr.destination.value) + '.png'
+        png = lang_flag(str(CfgPlTr.destination.value))
         if fileExists(png):
             self['flag'].instance.setPixmapFromFile(png)
         AfCache.change_timeout(CfgPlTr.timeout_hr.value)
@@ -311,6 +315,9 @@ Left <-> Right : <-> +- EPG Event
 Ok : enter text to translate
 Bouquet : +- Zap
 Menu : Setup
+Blue: Hide screen
+Yellow: Clear cache
+Red: Refresh EPG
 """
 
     def __init__(self, session, text):
@@ -339,46 +346,70 @@ Menu : Setup
         self['text2'] = ScrollLabel('')
         self['label'] = Label('= Hide')
         self['label2'] = Label('= Clear cache')
-# MovieSelectionActions are there so that Menu and Info keys work!(?)
+
+# Add the English (base) helptext if it is not there.
+# This ensures it gets added with the same newline spacing as any other
+# language
+        if 'en' not in self.helptext:
+            self.helptext['en'] = self.get_translation(self.base_helptext,
+                 from_lg='en', to_lg='en')
+
+# Add the helptext for the environment language and default destination
+# now
+        env_lang_base = language.getLanguage().partition("_")[0]
+        for lang in (env_lang_base, self.destination):
+            if lang not in self.helptext:
+                self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
+
+        AMbindings = {
+         'ok': self.get_text,
+         'cancel': self.exit,
+         'down': self.down,
+         'up': self.up,
+         'yellow': self.clear_cache,
+         'red': self.getEPG,
+         'green': self.showHelp,
+         'blue': self.hideScreen,
+         'contextMenu': self.config,
+         'bluelong': self.showHelp,
+         'showEventInfo': self.showHelp
+        }
+# We need to know if we are playing a recording, as if so we do NOT want
+# to activate the service-changing keys, or programme text changes.
+# We also don't need to set-up a ServiceEventTracker for a recording
+# The playback  state is also needed for getEPG(), so save it.
+#
+        self.inPlayBack = self.session.nav.getCurrentlyPlayingServiceOrGroup().isPlayback()
+        if not self.inPlayBack:
+# Add in service-change keys
+            AMbindings.update({
+             'right': self.rightDown,
+             'left': self.leftUp,
+             'nextBouquet': self.zapDown,
+             'prevBouquet': self.zapUp
+            })
+# Add an event tracker for changing service for not-in-Playback
+# This means we can call getEPG() *after* the service changes, even
+# if there may be a user prompt related to timeshift.
+#
+            self.__event_tracker = ServiceEventTracker(screen=self,
+                  eventmap= {iPlayableService.evTunedIn: self.__serviceTuned})
+
+# MovieSelectionActions are here so that Menu and Info keys work!(?)
         self['actions'] = ActionMap(['OkCancelActions',
              'DirectionActions',
              'ChannelSelectBaseActions',
              'ColorActions',
              'MovieSelectionActions',
              'HelpActions'],
-            {'ok': self.ok,
-             'cancel': self.exit,
-             'right': self.rightDown,
-             'left': self.leftUp,
-             'down': self.down,
-             'up': self.up,
-             'nextBouquet': self.zapDown,
-             'prevBouquet': self.zapUp,
-             'yellow': self.clear_cache,
-             'red': self.getEPG,
-             'green': self.showHelp,
-             'blue': self.hideScreen,
-             'contextMenu': self.config,
-             'bluelong': self.showHelp,
-             'showEventInfo': self.showHelp
-            }, -1)
+             AMbindings, -1)
         self.onLayoutFinish.append(self.onLayoutFinished)
 
-# Add the English (base) helptext if it is not there.
-# This ensures it gets added with the same newline spacing as any other
-# language
-        if 'en' not in self.helptext:
-            self.helptext['en'] = self.get_translation(self.base_helptext, from_lg='en', to_lg='en')
-
-# Add the helptext for the environment language and default destination
-# now
-        for lang in (language.getLanguage()[:2], self.destination):
-            if lang not in self.helptext:
-                self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
-
+# Set the current country flags as the screen diplays
+#
     def onLayoutFinished(self):
-        source = '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + self.source + '.png'
-        destination = '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + self.destination + '.png'
+        source = lang_flag(self.source)
+        destination = lang_flag(self.destination)
         if self.showsource == 'yes':
             if fileExists(source):
                 self['flag'].instance.setPixmapFromFile(source)
@@ -390,7 +421,14 @@ Menu : Setup
         else:                   self.translateEPG(self.text)
         return
 
-    def ok(self):
+# When the service changes, get the EPG for it.
+#
+    def __serviceTuned(self):
+        self.getEPG()
+
+# Bound to OK key. Request text to translate.
+#
+    def get_text(self):
         self.session.openWithCallback(self.translateText, VirtualKeyBoard, title='Text Translator:', text='')
 
 # Clear the cache of all items
@@ -425,7 +463,6 @@ Menu : Setup
             self['text'].setText(newtext)
             self['text2'].hide()
 
-
 # Translate the text of an EPG description
 # and display it
 #
@@ -440,7 +477,11 @@ Menu : Setup
             begin = ''
             duration = ''
         if do_translate:
-# Do we already have the translation?
+# Check whether we already have the translation.
+#
+# If we are playing back a recording only epg_N is defined
+# So we need to get some concept of epg_I for a playback
+# and use now()+3hr in place of (self.event[epg_B] + self.event[epg_D])
 #
                 uref = make_uref(self.event[epg_I], self.event[epg_N])
                 newtext = AfCache.fetch(uref)
@@ -450,8 +491,12 @@ Menu : Setup
 # the timeout to when the programme will leave the EPG
 # But even a specific timeout should not extend beyond programme
 # validity.
+# Also handle a recoding playback, which will have no begin nor duration.
 #
-                    to = int(self.event[epg_B] + self.event[epg_D] + 60*config.epg.histminutes.value)
+                    if self.event[epg_B] == None:   # A recording
+                        to = int(time.time() + 10800)
+                    else:
+                        to = int(self.event[epg_B] + self.event[epg_D] + 60*config.epg.histminutes.value)
                     if CfgPlTr.timeout_hr.value > 0:
                         limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
                         if limit < to:  to = limit
@@ -477,31 +522,51 @@ Menu : Setup
 #
     def getEPG(self):
         self.max = 1
-        self.count = 0
+        self.count = 0      # Starting point in list
         self.list = []
-        service = self.session.nav.getCurrentService()
-        info = service.info()
-        curEvent = info.getEvent(0)
-        if curEvent:
-# We'll get the same EPG as would be displayed - so we start at
-# config.epg.histminutes before now
+
+# If we are in playback then there is no EPG cache related to it
+# So just fudge in a single entry  for it - we've alreayd disabled
+# channel-changing keys for this case
+#
+        if self.inPlayBack:
+            ssn = self.session.nav
+            path = ssn.getCurrentlyPlayingServiceOrGroup().getPath()
+# Now head towards the event...
+            service = ssn.getCurrentService()
+            info = service.info()
+            curEvent = info.getEvent(0)     # 0 == NOW, 1 == NEXT
+            short = curEvent.getShortDescription()
+            extended = curEvent.getExtendedDescription()
+            sname = curEvent.getEventName()
+# Create a list of the correct size with all elements None
+#
+            pbinfo = [None]*(len(EPG_OPTIONS)-1)    # Ignoring X
+            pbinfo[epg_I] = path
+            pbinfo[epg_S] = short
+            pbinfo[epg_E] = extended
+            pbinfo[epg_N] = sname
+            self.list = [tuple(pbinfo)]
+        else:
+# We'll get the same EPG (for the current channel) as would be displayed
+# So we start at config.epg.histminutes before now.
 # We'll remember everything returned by lookupEvent()
 #
             t_now = int(time.time())
             epg_base = t_now - 60*int(config.epg.histminutes.value)
-            epg_extent = 86400*14   # 14 days later
+            epg_extent = 86400*14   # Get up to 14 days from now
             ref = self.session.nav.getCurrentlyPlayingServiceReference()
             test = [ EPG_OPTIONS, (ref.toString(), 0, epg_base, epg_extent) ]
             epgcache = eEPGCache.getInstance()
             self.list = epgcache.lookupEvent(test)
             self.max = len(self.list)
-# Set the starting point to the currently running service, which will be
+# Update the starting point to the currently running service, which will be
 # the last one before one with a future starting time
 #
-            self.count = 0      # In case we don't find one...
             for i in range(1,len(self.list)):
                 if self.list[i][epg_B] > t_now: break
                 self.count = i
+# Get the display going...
         self.showEPG()
         return
 
@@ -556,12 +621,10 @@ Menu : Setup
     def zapUp(self):
         if InfoBar and InfoBar.instance:
             InfoBar.zapUp(InfoBar.instance)
-            self.getEPG()
 
     def zapDown(self):
         if InfoBar and InfoBar.instance:
             InfoBar.zapDown(InfoBar.instance)
-            self.getEPG()
 
     def showHelp(self):
 # Display the help in the current environment and destination language
