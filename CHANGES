@@ -90,3 +90,6 @@ plugin.py
 
 README
     Update the release README to add more detail.
+
+*-2.01-rc2.ipk
+    Built 2.01-rc2.ipk.  2.01-rc1.ipk removed.
