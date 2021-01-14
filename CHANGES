@@ -87,3 +87,6 @@ plugin.py
     anything happens).
     Handle viewing a playback of a recording by creating a hand-crafted
     EPG with one entry.
+
+README
+    Update the release README to add more detail.
