@@ -142,10 +142,16 @@ enigma2-plugin-extensions-translator_2.0-rc2_all.ipk
     https://www.world-of-satellite.com/showthread.php?31010-EPG-translator-(download-thread)&p=507698&viewfull=1#post507698
 Added the 2.01-rc3 tag.
 
-==========
+========== 2.01-rc3
 
 plugin.py
     Added a regex handler for [] groups being at the start of a
     descripton. Use it if char1 is [, use the end group match if chsar-1
     is ] and do not matching otherwise.
     Removed the 3-char limit for an individual tag within [].
+    Updated version tag to 2.01-rc4
+
+control
+    Built ipk
+    Added the 2.01-rc4 tag
+    
