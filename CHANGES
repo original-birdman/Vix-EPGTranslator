@@ -135,9 +135,11 @@ plugin.py
     update both that and setTitle() with the translation, as skins may
     be using either.
 
-Added the 2.01-rc3 tag.
+enigma2-plugin-extensions-translator_2.0-rc2_all.ipk
+    Deleted
     Dev releases will no longer be put on github.
     They will be posted here (and later posts)
     https://www.world-of-satellite.com/showthread.php?31010-EPG-translator-(download-thread)&p=507698&viewfull=1#post507698
+Added the 2.01-rc3 tag.
 
 ==========
