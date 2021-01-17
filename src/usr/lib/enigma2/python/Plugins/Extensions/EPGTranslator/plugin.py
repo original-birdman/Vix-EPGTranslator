@@ -3,7 +3,7 @@
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.0-rc3"
+EPGTrans_vers = "2.0-rc4"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
@@ -269,24 +269,41 @@ class translatorConfig(ConfigListScreen, Screen):
         return
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-#
-# A regular expression to remove [xx(,xx)] tags from the end of a
-# description. The 3 is the max length of an individual tag.
+
+# A regular expression to remove [xx(,xx)] tags from the start of a
+# description.
 # Also the compiled pattern to it.
 #
-prop_patt = """
+begin_props = """
+(                           # Start all [] groups saving
+ (?:\[                      # Start a group
+  (?:[^,]+,)*               # Leading tags (trailing ,)
+  (?:[^,]+)                 # final tag (no ,)
+  \]\s*                     # end a prop
+ )*                         # end a group - and repeat
+\s?)                        # End all [] groups saving
+(.*)                        # The real description
+"""
+
+# A regular expression to remove [xx(,xx)] tags from the end of a
+# description.
+# Also the compiled pattern to it.
+#
+
+end_props = """
 (.*?)                       # The real description
 \s*                         # Optional whitespace
 (                           # Start all [] groups saving
  (?:\[                      # Start a group
-  (?:[^,]{1,3},)*           # Leading tags (trailing ,)
-  (?:[^,]{1,3})             # final tag (no ,)
+  (?:[^,]+,)*               # Leading tags (trailing ,)
+  (?:[^,]+)                 # final tag (no ,)
   \]\s*                     # end a prop
  )*                         # end a group - and repeat
 )                           # End all [] groups saving
 \s*$                        # to EOL and RE options
 """
-prop_matcher = re.compile(prop_patt, flags=re.X)
+begin_matcher = re.compile(begin_props, flags=re.X|re.S)
+end_matcher = re.compile(end_props, flags=re.X|re.S)
 
 # A string to use as a separator when the title and description are
 # combined for a one-call translation.
@@ -533,8 +550,17 @@ Red: Refresh EPG
 # them to the result.
 # We use a regex to match the two groups. The Python documentation
 # for a multi-group match makes no sense. This is what seems to work....
+# Only do this for a description that starts with [ or ends with ]
 #
-                    (desc, prop) = re.findall(prop_matcher, descr)[0]
+                    if descr[0] == '[':
+                        (prop, desc) = re.findall(begin_matcher, descr)[0]
+                        prepend_props = True
+                    elif descr[-1] == ']':
+                        (desc, prop) = re.findall(end_matcher, descr)[0]
+                        prepend_props = False
+                    else:
+                        desc = descr
+                        prop = ''
 
 # We wish to translate the title and description in one call
 # So we:
@@ -548,7 +574,11 @@ Red: Refresh EPG
                         (t_sep, t_rest) = t_text.split("\n", 1)
                         (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
                         if prop != "":
-                            t_descr += " " + prop
+# prop will contain the "correct" trailing/whitespace
+                            if prepend_props:
+                                t_descr = prop + t_descr
+                            else:
+                                t_descr = t_descr + prop
 
 # Work out a timeout for the result.
 # If we have a specific timeout (in hours) use it, but if this is 0 set

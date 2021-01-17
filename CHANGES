@@ -143,3 +143,9 @@ enigma2-plugin-extensions-translator_2.0-rc2_all.ipk
 Added the 2.01-rc3 tag.
 
 ==========
+
+plugin.py
+    Added a regex handler for [] groups being at the start of a
+    descripton. Use it if char1 is [, use the end group match if chsar-1
+    is ] and do not matching otherwise.
+    Removed the 3-char limit for an individual tag within [].
