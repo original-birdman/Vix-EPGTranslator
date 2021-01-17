@@ -109,3 +109,35 @@ AutoflushCache.py
     Define, in __init__(), the value to return for "not found" key
     lookups. This allows the storage of (title, descr) tuples (and
     other things).
+
+plugin.py
+    Put list() around range()s, for Py3.
+    Reformat language list (to use fewer lines).
+    Update AutoflushCache() calls to store a (title, descr) tuple.
+    Move 2000 char test into the DO_translation() function.
+    Translate both the Title and Description for programmes (still done
+    in a single call to translate.google.com)
+    Replaced the isPlayback() test for being in playback mode, as it's
+    Vix specific.
+    Add a my_Sref() method, as we need a serviceref in a few locations.
+    Add the current service (channel) name to the title in the
+    translator EPG browser.
+    strip() all text we are asked to translate.
+    Append a newline to the begin text, and prepend one to the duration
+    text instead.  Gives consistency.
+    Cater for recordings with no Event info (happens for downloaded
+    files).
+    Add try/except clauses when fetching data to translate so that if
+    something goes wrong we just fail to translate, rather than crash.
+    Change the "EventID" for a recording to be the dev:inode for the
+    recording, rather than its full pathname.
+    In My_setEvent() get the title text from self["epg_eventname"], then
+    update both that and setTitle() with the translation, as skins may
+    be using either.
+
+Added the 2.01-rc3 tag.
+    Dev releases will no longer be put on github.
+    They will be posted here (and later posts)
+    https://www.world-of-satellite.com/showthread.php?31010-EPG-translator-(download-thread)&p=507698&viewfull=1#post507698
+
+==========

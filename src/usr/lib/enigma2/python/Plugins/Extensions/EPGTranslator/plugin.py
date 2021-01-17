@@ -13,7 +13,7 @@ from Components.Language import language
 from Components.Pixmap import Pixmap
 from Components.ScrollLabel import ScrollLabel
 from Components.ServiceEventTracker import ServiceEventTracker
-from enigma import eEPGCache, eServiceReference, getDesktop, iPlayableService
+from enigma import eEPGCache, eServiceReference, getDesktop, iPlayableService, iServiceInformation
 from Plugins.Plugin import PluginDescriptor
 from Screens.EpgSelection import EPGSelection
 from Screens.EventView import EventViewBase
@@ -23,7 +23,7 @@ from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Tools.Directories import fileExists
 
-import socket, sys, re, time
+import socket, sys, re, time, os
 
 from .AutoflushCache import AutoflushCache
 from .HTML5Entities import name2codepoint
@@ -67,7 +67,7 @@ EPG_OPTIONS = 'BDTSEINX'    # X is not a returned-value setting
 # is automatically handled
 #
 ci = 0
-for i in range(len(EPG_OPTIONS)):
+for i in list(range(len(EPG_OPTIONS))):
     if EPG_OPTIONS[i] == 'X': continue
     exec("epg_%s = %d" % (EPG_OPTIONS[i], ci))
     ci += 1
@@ -75,60 +75,26 @@ for i in range(len(EPG_OPTIONS)):
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 # Configuration settings.
 #
-# The list of available languages
+# The list of available languages (sorted alphabetically)
 #
 langs =  [
- ('af', _('Afrikaans')),
- ('sq', _('Albanian')),
- ('ar', _('Arabic')),
- ('az', _('Azerbaijani')),
- ('eu', _('Basque')),
- ('be', _('Belarusian')),
- ('bs', _('Bosnian')),
- ('bg', _('Bulgarian')),
- ('ca', _('Catalan')),
- ('ceb', _('Cebuano')),
- ('hr', _('Croatian')),
- ('cs', _('Czech')),
- ('da', _('Danish')),
- ('nl', _('Dutch')),
- ('en', _('English')),
- ('et', _('Estonian')),
- ('tl', _('Filipino')),
- ('fi', _('Finnish')),
- ('fr', _('French')),
- ('gl', _('Galician')),
- ('de', _('German')),
- ('el', _('Greek')),
- ('ht', _('Haitian Creole')),
- ('hu', _('Hungarian')),
- ('is', _('Icelandic')),
- ('id', _('Indonesian')),
- ('ga', _('Irish')),
- ('it', _('Italian')),
- ('jw', _('Javanese')),
- ('lv', _('Latvian')),
- ('lt', _('Lithuanian')),
- ('mk', _('Macedonian')),
- ('ms', _('Malay')),
- ('mt', _('Maltese')),
- ('no', _('Norwegian')),
- ('fa', _('Persian')),
- ('pl', _('Polish')),
- ('pt', _('Portuguese')),
- ('ro', _('Romanian')),
- ('ru', _('Russian')),
- ('sr', _('Serbian')),
- ('sk', _('Slovak')),
- ('sl', _('Slovenian')),
- ('es', _('Spanish')),
- ('sw', _('Swahili')),
- ('sv', _('Swedish')),
- ('tr', _('Turkish')),
- ('uk', _('Ukrainian')),
- ('ur', _('Urdu')),
- ('vi', _('Vietnamese')),
- ('cy', _('Welsh'))
+('af', _('Afrikaans')),         ('sq', _('Albanian')),          ('ar', _('Arabic')),
+('az', _('Azerbaijani')),       ('eu', _('Basque')),            ('be', _('Belarusian')),
+('bs', _('Bosnian')),           ('bg', _('Bulgarian')),         ('ca', _('Catalan')),
+('ceb', _('Cebuano')),          ('hr', _('Croatian')),          ('cs', _('Czech')),
+('da', _('Danish')),            ('nl', _('Dutch')),             ('en', _('English')),
+('et', _('Estonian')),          ('tl', _('Filipino')),          ('fi', _('Finnish')),
+('fr', _('French')),            ('gl', _('Galician')),          ('de', _('German')),
+('el', _('Greek')),             ('ht', _('Haitian Creole')),    ('hu', _('Hungarian')),
+('is', _('Icelandic')),         ('id', _('Indonesian')),        ('ga', _('Irish')),
+('it', _('Italian')),           ('jw', _('Javanese')),          ('lv', _('Latvian')),
+('lt', _('Lithuanian')),        ('mk', _('Macedonian')),        ('ms', _('Malay')),
+('mt', _('Maltese')),           ('no', _('Norwegian')),         ('fa', _('Persian')),
+('pl', _('Polish')),            ('pt', _('Portuguese')),        ('ro', _('Romanian')),
+('ru', _('Russian')),           ('sr', _('Serbian')),           ('sk', _('Slovak')),
+('sl', _('Slovenian')),         ('es', _('Spanish')),           ('sw', _('Swahili')),
+('sv', _('Swedish')),           ('tr', _('Turkish')),           ('uk', _('Ukrainian')),
+('ur', _('Urdu')),              ('vi', _('Vietnamese')),        ('cy', _('Welsh'))
 ]
 
 # Source has an auto option in first place on the list
@@ -150,9 +116,9 @@ CfgPlTr.showsource = ConfigSelection(default='yes',
  choices=[('yes', _('Yes')), ('no', _('No'))])
 
 # Now we have the config vars, create an AutoflushCache to hold the
-# translations
+# translations. We are storing tuples, so give a suitable null_return
 #
-AfCache = AutoflushCache(CfgPlTr.timeout_hr.value)
+AfCache = AutoflushCache(CfgPlTr.timeout_hr.value, null_return=(None, None))
 
 # Get the skin settings etc. that are dependent on screen size.
 # If the screen size isn't (always a) constant between Vix start-ups
@@ -208,7 +174,9 @@ def transHTMLEnts(text):
 # the callers do not need to.
 #
 def DO_translation(text, source, dest):     # source, dest are langs
+
     text = quote(text)  # url-encode the text ("quote" is a misnomer)
+    if len(text) > 2000:    text = text[0:2000]     # Need limit for uri
 
 # The /m url produces a smaller result to the "full" (/) page.
 # It also (more importantly) actually returns the translated text!
@@ -241,10 +209,10 @@ def DO_translation(text, source, dest):     # source, dest are langs
     return newtext
 
 # Create a reference key for the cache.
-# Done in once place to ensure consistency.
+# Done in one place to ensure consistency.
 # Not a class method as it is called from multiple classes
 # (Can't set lang=CfgPlTr.destination.value in the def() as that
-# only gets evaluated once at sret-up)
+# only gets evaluated once at set-up)
 #
 def make_uref(sv_id, sv_name, lang=None):
     if lang == None:
@@ -302,6 +270,10 @@ class translatorConfig(ConfigListScreen, Screen):
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 #
+# A regular expression to remove [xx(,xx)] tags from the end of a
+# description. The 3 is the max length of an individual tag.
+# Also the compiled pattern to it.
+#
 prop_patt = """
 (.*?)                       # The real description
 \s*                         # Optional whitespace
@@ -314,8 +286,14 @@ prop_patt = """
 )                           # End all [] groups saving
 \s*$                        # to EOL and RE options
 """
-
 prop_matcher = re.compile(prop_patt, flags=re.X)
+
+# A string to use as a separator when the title and description are
+# combined for a one-call translation.
+# The idea is that it should be unchanged by the translation, but the
+# code does attempt to handle things even if it is changed.
+#
+sepline = "=========="
 
 class translatorMain(Screen):
 
@@ -355,6 +333,7 @@ Red: Refresh EPG
         self.count = 0
         self.list = []
         self.eventName = ''
+
         self['flag'] = Pixmap()
         self['flag2'] = Pixmap()
         self['text'] = ScrollLabel('')
@@ -389,28 +368,41 @@ Red: Refresh EPG
          'bluelong': self.showHelp,
          'showEventInfo': self.showHelp
         }
-# We need to know if we are playing a recording, as if so we do NOT want
-# to activate the service-changing keys, or programme text changes.
-# We also don't need to set-up a ServiceEventTracker for a recording
-# The playback  state is also needed for getEPG(), so save it.
+# We need to know whether we are playing a recording as, if so, we do
+# NOT want to activate the service-changing keys, nor programme text
+# changes.
+# We also don't need to set-up a ServiceEventTracker for a recording, as
+# the even can't occur.
+# The playback state is also needed for getEPG(), so save it.
+# Do NOT use:
+#   self.session.nav.getCurrentlyPlayingServiceOrGroup().isPlayback()
+# as the test as that isPlayback() is Vix-specific
 #
-        self.inPlayBack = self.session.nav.getCurrentlyPlayingServiceOrGroup().isPlayback()
-        if not self.inPlayBack:
-# Add in service-change keys
+        self.inPlayBack = "0:0:0:0:0:0:0:0:0" in self.my_Sref().toCompareString()
+
+# Add the channel name.
+        wintitle = 'EPG Translator'
+        try:
+            cur_serv = self.my_Sref().getServiceName()
+            wintitle += " - " + cur_serv
+        except:
+            pass
+        self.setTitle(wintitle)
+
+        if not self.inPlayBack: # We can add in service-change keys
             AMbindings.update({
              'right': self.rightDown,
              'left': self.leftUp,
              'nextBouquet': self.zapDown,
              'prevBouquet': self.zapUp
             })
-# Add an event tracker for changing service for not-in-Playback
+# Also add the event tracker for changing service for not-in-Playback
 # This means we can call getEPG() *after* the service changes, even
 # if there may be a user prompt related to timeshift.
 #
             self.__event_tracker = ServiceEventTracker(screen=self,
                   eventmap= {iPlayableService.evTunedIn: self.__serviceTuned})
 
-# MovieSelectionActions are here so that Menu and Info keys work!(?)
         self['actions'] = ActionMap(['OkCancelActions',
              'DirectionActions',
              'ChannelSelectBaseActions',
@@ -420,7 +412,7 @@ Red: Refresh EPG
              AMbindings, -1)
         self.onLayoutFinish.append(self.onLayoutFinished)
 
-# Set the current country flags as the screen diplays
+# Set the current country flags as the screen displays
 #
     def onLayoutFinished(self):
         source = lang_flag(self.source)
@@ -432,16 +424,33 @@ Red: Refresh EPG
                 self['flag2'].instance.setPixmapFromFile(destination)
         elif fileExists(destination):
             self['flag'].instance.setPixmapFromFile(destination)
+# I think self.text is always None, but leave this here anyway.
         if self.text is None:   self.getEPG()
-        else:                   self.translateEPG(self.text)
+        else:                   self.translateEPG(self.text, '')
         return
 
 # When the service changes, get the EPG for it.
-#
+# And update the channel name.
+
     def __serviceTuned(self):
+        wintitle = 'EPG Translator'
+        try:
+            cur_serv = self.my_Sref().getServiceName()
+            wintitle += " - " + cur_serv
+        except:
+            pass
+        self.setTitle(wintitle)
         self.getEPG()
 
-# Bound to OK key. Request text to translate.
+# Get the ServiceRef for the current object
+# We do this in several places
+#
+    def my_Sref(self):
+        service = self.session.nav.getCurrentService()
+        info = service.info()
+        return eServiceReference(info.getInfoString(iServiceInformation.sServiceref))
+
+# Bound to OK key. Request text (via a VirtualKeyBoard) to translate.
 #
     def get_text(self):
         self.session.openWithCallback(self.translateText, VirtualKeyBoard, title='Text Translator:', text='')
@@ -456,12 +465,13 @@ Red: Refresh EPG
 # We are allowed to force the source or destination language...
 #
     def get_translation(self, text, from_lg=None, to_lg=None):
-        if len(text) > 2000:    text = text[0:2000]
         if from_lg != None: source = from_lg
         else:               source = self.source
         if to_lg != None:   dest = to_lg
         else:               dest = self.destination
         return DO_translation(text, source, dest)
+
+# For both translate* calls we strip() any text we are given (consistency)
 
 # Translate the text (entered via a VirtualKeyboard)
 # and display it
@@ -469,6 +479,7 @@ Red: Refresh EPG
     def translateText(self, text):
         if not text or text == '':      # Don't translate nothing
             return
+        text = text.strip()
         self.setTitle('Text Translator')
         newtext = self.get_translation(text)
         if self.showsource == 'yes':
@@ -481,69 +492,97 @@ Red: Refresh EPG
 # Translate the text of an EPG description
 # and display it
 #
-    def translateEPG(self, text, do_translate=True):
-        if not text or text == '':      # Don't do nothing
+    def translateEPG(self, title, descr, do_translate=True):
+        if title == None:
+            title = ''
+        else:
+            title = title.strip()
+        if descr == None:
+            descr = ''
+        else:
+            descr = descr.strip()
+        if (title == '') and (descr == ''): # Don't display nothing
             return
-        self.setTitle('EPG Translator')
+
+# We don't set epg_B for a recording, so this will drop to the exception
+# Also, add begin/duration spacing newlines here, so there are none
+# if we hit the exception.
+#
         try:
-            begin=time.strftime('%Y-%m-%d %H:%M', time.localtime(int(self.event[epg_B])))
-            duration = "%d min" % (int(self.event[epg_D]) / 60)
+            begin=time.strftime("%Y-%m-%d %H:%M\n", time.localtime(int(self.event[epg_B])))
         except:
             begin = ''
+        if self.event[epg_D] > 0:
+            duration = "\n\n" + "%d min" % (int(self.event[epg_D]) / 60)
+        else:
             duration = ''
         if do_translate:
 # Check whether we already have the translation.
 #
-# If we are playing back a recording only epg_N is defined
-# So we need to get some concept of epg_I for a playback
-# and use now()+3hr in place of (self.event[epg_B] + self.event[epg_D])
+# If we are playing back a recording we'll have set epg_I to its path file_info
+# and epg_N to the title, or "PLAYBACK"
 #
                 uref = make_uref(self.event[epg_I], self.event[epg_N])
-                newtext = AfCache.fetch(uref)
-                if newtext == None:    # Not there...
+                (t_title, t_descr) = AfCache.fetch(uref)
+                if t_descr == None:   # Not there...
 # We need to translate the description.
 # Some descriptions (e.g. UK Freeview) can contain "properties" in [] at
 # the end.  And so [S,AD] (subtitles, audio-description) end up being
-# translated (for en -> de) as [TRAURIG].
+# translated (e.g. for en -> de [S,AD] -> [TRAURIG]).
 # So strip any such trailers before sending for translation then append
 # them to the result.
-# We use a regex to match the two groups. The Pythin documentation
+# We use a regex to match the two groups. The Python documentation
 # for a multi-group match makes no sense. This is what seems to work....
 #
-                    (desc, prop) = re.findall(prop_matcher, text)[0]
-                    newtext = self.get_translation(desc)
-                    if prop != "":
-                        newtext += " " + prop
+                    (desc, prop) = re.findall(prop_matcher, descr)[0]
+
+# We wish to translate the title and description in one call
+# So we:
+#   send sepline\n+title+\nsepline\n+desc
+#   take the first line of what comes back
+#   split the rest into two based on that first line
+#
+                    r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
+                    t_text = self.get_translation(r_text)
+                    try:
+                        (t_sep, t_rest) = t_text.split("\n", 1)
+                        (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
+                        if prop != "":
+                            t_descr += " " + prop
 
 # Work out a timeout for the result.
 # If we have a specific timeout (in hours) use it, but if this is 0 set
-# the timeout to when the programme will leave the EPG
+# the timeout to when the programme will leave the EPG.
 # But even a specific timeout should not extend beyond programme
 # validity.
-# Also handle a recoding playback, which will have no begin nor duration.
+# Also handle a recording playback, which will have neither begin nor duration.
 #
-                    if self.event[epg_B] == None:   # A recording
-                        to = int(time.time() + 10800)
-                    else:
-                        to = int(self.event[epg_B] + self.event[epg_D] + 60*config.epg.histminutes.value)
-                    if CfgPlTr.timeout_hr.value > 0:
-                        limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
-                        if limit < to:  to = limit
-                    AfCache.add(uref, newtext, abs_timeout=to)
-        else:
-            newtext = text
-        newtext = re.sub('\n ', '\n', newtext)
+                        if self.event[epg_B] == None:   # A recording
+                            to = int(time.time() + 10800)
+                        else:
+                            to = int(self.event[epg_B] + self.event[epg_D] + 60*config.epg.histminutes.value)
+                        if CfgPlTr.timeout_hr.value > 0:
+                            limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
+                            if limit < to:  to = limit
+                        AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
+                    except: # Use originals on a failure...
+                        (t_title, t_descr) = (title, descr)
+# We now have the title+descr and t_title+t_descr to display
+# None of the fields should have trailing newlines, so we should know
+# where we are.
+#
+        tr_text = t_title + "\n\n" + t_descr
         if self.refresh == False:
-            newtext = begin + '\n\n' + newtext + '\n\n' + duration
-            newtext = re.sub('\n\n\n\n', '\n\n', newtext)
+            tr_text = begin + tr_text + duration
         if self.showsource == 'yes':
+            or_text = title + "\n\n" + descr
             if self.refresh == False:
-                self['text'].setText(begin + '\n\n' + text + '\n\n' + duration)
+                self['text'].setText(begin + or_text + duration)
             else:
-                self['text'].setText(text)
-            self['text2'].setText(newtext)
+                self['text'].setText(or_text)
+            self['text2'].setText(tr_text)
         else:
-            self['text'].setText(newtext)
+            self['text'].setText(tr_text)
             self['text2'].hide()
 
 # Populate the EPG data in self.list from the box's internal EPG cache
@@ -554,26 +593,49 @@ Red: Refresh EPG
         self.list = []
 
 # If we are in playback then there is no EPG cache related to it
-# So just fudge in a single entry  for it - we've alreayd disabled
+# So just fudge in a single entry for it - we've already disabled
 # channel-changing keys for this case
 #
         if self.inPlayBack:
             ssn = self.session.nav
             path = ssn.getCurrentlyPlayingServiceOrGroup().getPath()
+            finfo = os.stat(path)
+            file_id = str(finfo.st_dev) + ":" + str(finfo.st_ino)
 # Now head towards the event...
             service = ssn.getCurrentService()
             info = service.info()
             curEvent = info.getEvent(0)     # 0 == NOW, 1 == NEXT
-            short = curEvent.getShortDescription()
-            extended = curEvent.getExtendedDescription()
-            sname = curEvent.getEventName()
+# A downloaded file (from iPlayer - any mp4?) appears to have no
+# curEvent, so cater for this.
+# Set some default fields in case we fail for any reason...
+#
+            short = ""
+            extended = "Description unavailable"
+            ename = "Unknown title"
+            Servname = "PLAYBACK"
+            dur = 0
+            try:
+                if curEvent:
+                    short = curEvent.getShortDescription()
+                    extended = curEvent.getExtendedDescription()
+                    ename = curEvent.getEventName()
+                    Servname = ename
+                    dur = curEvent.getDuration()
+                else:
+                    ename = self.my_Sref().getServiceName()
+                    Servname = ename
+            except:
+                pass
+
 # Create a list of the correct size with all elements None
 #
             pbinfo = [None]*(len(EPG_OPTIONS)-1)    # Ignoring X
-            pbinfo[epg_I] = path
+            pbinfo[epg_I] = file_id
             pbinfo[epg_S] = short
             pbinfo[epg_E] = extended
-            pbinfo[epg_N] = sname
+            pbinfo[epg_T] = ename
+            pbinfo[epg_N] = Servname
+            pbinfo[epg_D] = dur
             self.list = [tuple(pbinfo)]
         else:
 # We'll get the same EPG (for the current channel) as would be displayed
@@ -583,15 +645,14 @@ Red: Refresh EPG
             t_now = int(time.time())
             epg_base = t_now - 60*int(config.epg.histminutes.value)
             epg_extent = 86400*14   # Get up to 14 days from now
-            ref = self.session.nav.getCurrentlyPlayingServiceReference()
-            test = [ EPG_OPTIONS, (ref.toString(), 0, epg_base, epg_extent) ]
+            test = [ EPG_OPTIONS, (self.my_Sref().toCompareString(), 0, epg_base, epg_extent) ]
             epgcache = eEPGCache.getInstance()
             self.list = epgcache.lookupEvent(test)
             self.max = len(self.list)
 # Update the starting point to the currently running service, which will be
 # the last one before one with a future starting time
 #
-            for i in range(1,len(self.list)):
+            for i in list(range(1,len(self.list))):
                 if self.list[i][epg_B] > t_now: break
                 self.count = i
 # Get the display going...
@@ -603,12 +664,12 @@ Red: Refresh EPG
     def showEPG(self):
         try:
             self.event = self.list[self.count]
-            text=self.event[epg_T]
+            title=self.event[epg_T]
             short=self.event[epg_S]
             extended=self.event[epg_E]
             self.refresh = False
         except:
-            text = 'Press red button to refresh EPG'
+            title = 'Press red button to refresh EPG'
             short = ''
             extended = ''
             self.refresh = True
@@ -616,13 +677,13 @@ Red: Refresh EPG
 # This MUST match the code in EventViewBase.setEvent() to get extended
 # That way we can use the same cache for both...
 #
-        if short == text:
+        if short == title:
             short = ""
         if short and extended:
             extended = short + '\n' + extended
         elif short:
             extended = short
-        self.translateEPG(str(extended))
+        self.translateEPG(title, extended)
 
     def leftUp(self):
         self.count -= 1
@@ -709,8 +770,11 @@ def EPGTr_ToggleMode(self):
 
 # We need to update the event text - its translation state has changed.
 # So we set the event to the current event.
+# So we call setEvent(), which should now My_setEvent() but we still
+# call setEvent() in case some other plugin has intercepted the call as
+# well.
 #
-    self.setEvent(self.event)   # Which is now My_setEvent()...
+    self.setEvent(self.event)
 
 ##################################################################
 # The code to handle the text that will be displayed.
@@ -727,28 +791,51 @@ def My_setEvent(self, event):
 #
     if not self.EPGTr_translating: return
 
-# ... but if we are now translating we need to change the text which
+# ... but if we are translating we need to change the text which
 # the orig_EVB_setEvent() call above has set.
 #
 
 # Do we already have the translation for this lang/eventID/Service?
-# If so, just use what we already have
+# If so, just use what we already have.
+# NOTE that a playback of a programme with no Info (e.g. an Iplayer
+# download) won't get here (since no EventView window appears).
+# A playback of a recording will, and has valid getEventId() and
+# getServiceName() results.
 #
     uref = make_uref(event.getEventId(), self.currentService.getServiceName())
-    newtext = AfCache.fetch(uref)
-    if newtext == None:    # Not there...work out what it should be
-
-# The current text will have been put into the self["FullDescription"]
-# (and elf["summary_description"]) ScrollLabel object in
+    (title, descr) = AfCache.fetch(uref)
+    if descr == None:   # Not there...work out what it should be
+        try:            # Duck out having set nothing on an error...
+# The current descr will have been put into the self["FullDescription"]
+# and the title into self["epg_eventname"]) ScrollLabel objects in
 # EventViewBase.setEvent().
-# So just retrieve it from there and translate it...
+# So get them from there and translate them
+# Whether the translation is actually displayed depends on the skin.
+# Whereas all(?) show FullDescription, some use Title for epg_eventname
 #
+            title = self["epg_eventname"].getText().strip()
+            descr = self["FullDescription"].getText().strip()
 
-        extended = self["FullDescription"].getText()
-        newtext = DO_translation(extended,
-             str(CfgPlTr.source.value),
-             str(CfgPlTr.destination.value)
-            )
+# Need to handle this the same way here as for translateEPG()
+# Add a common function for this after its working???
+#
+            (desc, prop) = re.findall(prop_matcher, descr)[0]
+
+# We wish to translate the title and description in one call
+# So we:
+#   send sepline+title+sepline+desc
+#   take the first line of what comes back
+#   split the rest into two based on that first line
+#
+            r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
+            t_text = DO_translation(r_text,
+                 str(CfgPlTr.source.value),
+                 str(CfgPlTr.destination.value)
+                )
+            (t_sep, t_rest) = t_text.split("\n", 1)
+            (title, descr) = t_rest.split("\n" + t_sep + "\n", 1)
+            if prop != "":
+                descr += " " + prop
 
 # ...and add that to the cache
 #
@@ -757,14 +844,22 @@ def My_setEvent(self, event):
 # But even a specific timeout should not extend beyond programme
 # validity.
 #
-        to = int(event.getBeginTime() + event.getDuration() + 60*config.epg.histminutes.value)
-        if CfgPlTr.timeout_hr.value > 0:
-            limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
-            if limit < to:  to = limit
-        AfCache.add(uref, newtext, abs_timeout=to)
+            to = int(event.getBeginTime() + event.getDuration() + 60*config.epg.histminutes.value)
+            if CfgPlTr.timeout_hr.value > 0:
+                limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
+                if limit < to:  to = limit
+            AfCache.add(uref, (title, descr), abs_timeout=to)
+        except:
+            return      # Do nothing on any failure
 
-    self["FullDescription"].setText(newtext)
-    self["summary_description"].setText(newtext)
+# We have a set of translations now.
+# Different skins use different fields for these data, so
+# populate both for each.
+#
+    self.setTitle(title)
+    self["epg_eventname"].setText(title)
+    self["FullDescription"].setText(descr)
+    self["summary_description"].setText(descr)
 
 ##################################################################
 # Intercepting code for EventViewBase __init__()
@@ -801,6 +896,7 @@ def My_EVB__init__(self, *args, **kwargs):
 autostart_init_done = False
 def autostart(reason, **kwargs):
     global orig_EVB__init__, orig_EVB_setEvent
+    global autostart_init_done      # Otherwise we create a local one
 
 # We only want to do this when starting (reason == 0)
 # AND we only want to do it once (although we will probably only get
@@ -811,7 +907,6 @@ def autostart(reason, **kwargs):
 
 # Note that we will have done it.
 #
-    global autostart_init_done      # Otherwise we create a local one
     autostart_init_done = True
 
 # Intercepted for additional code
