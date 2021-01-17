@@ -38,7 +38,7 @@ plugin.py
     call on a return to a previously-seen item.
 
 plugin.py
-    Move the text translaton call into a stand-alone DO_translation()
+    Move the text translation call into a stand-alone DO_translation()
     function so that it may be called from anywhere.
 
 plugin.py
@@ -104,3 +104,8 @@ plugin.py
     Removed [..] trailing props before sending them for translation, and
     add them back afterwards for display.
     Prevents en -> de changing [S,AD] to [TRAURIG]
+
+AutoflushCache.py
+    Define, in __init__(), the value to return for "not found" key
+    lookups. This allows the storage of (title, descr) tuples (and
+    other things).

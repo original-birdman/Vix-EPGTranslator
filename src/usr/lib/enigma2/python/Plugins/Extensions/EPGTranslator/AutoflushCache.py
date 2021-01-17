@@ -6,10 +6,11 @@
 import time
 
 class AutoflushCache:
-    def __init__(self, default_timeout):
+    def __init__(self, default_timeout, null_return=None):
         self.cache = {}         # key -> val pairs
         self.clear_time = []    # sorted (abs_timeout, key) tuples
         self.dflt_rel_timeout = abs(default_timeout)
+        self.null_return = null_return
 
 # Change the default timeout.
 # Only affects newly added keys (since we don't store how values
@@ -61,14 +62,14 @@ class AutoflushCache:
 
 # Get the value for a key.
 # Calls flush() before fetching.
-# Returns None if there is no such key.
+# Returns the null_return if there is no such key.
 #
     def fetch(self, key):
         self.flush()
         if key in self.cache:
             retval = self.cache[key]
         else:
-            retval = None
+            retval = self.null_return
         return retval
 
 # Delete a key if present.
