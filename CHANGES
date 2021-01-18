@@ -167,3 +167,7 @@ plugin.py
     Fixed My_setEvent() to use the new begin_matcher+end_matcher
     regexes.
     Updated version tag to 2.01-rc5
+
+control
+    Built ipk
+    Added the 2.01-rc5 tag to git
