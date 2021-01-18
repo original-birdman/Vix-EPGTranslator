@@ -3,7 +3,7 @@
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.0-rc4"
+EPGTrans_vers = "2.0-rc5"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
@@ -48,7 +48,7 @@ else:
 # Who we will pretend to be when calling translate.google.com
 #
 # dflt_UA = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:83.0) Gecko/20100101 Firefox/83.0'
-dflt_UA = 'OpenVix EPG Translator version: ' + EPGTrans_vers
+dflt_UA = 'OpenVix EPG Translator (Mozilla/5.0 compat): ' + EPGTrans_vers
 
 # Useful constants for EPG fetching.
 #
@@ -176,7 +176,11 @@ def transHTMLEnts(text):
 def DO_translation(text, source, dest):     # source, dest are langs
 
     text = quote(text)  # url-encode the text ("quote" is a misnomer)
-    if len(text) > 2000:    text = text[0:2000]     # Need limit for uri
+# The actual limit for this is 7656~7707
+# Could add code to split the query (on a suitable boundary, into
+# similar request sizes) beyond that.
+#
+    if len(text) > 7000: text = text[0:7000]    # Need limit for uri
 
 # The /m url produces a smaller result to the "full" (/) page.
 # It also (more importantly) actually returns the translated text!
@@ -245,6 +249,7 @@ class translatorConfig(ConfigListScreen, Screen):
               'green': self.save
              },
             -1)
+        self.setTitle("EPG Translator Setup - " + EPGTrans_vers)
         self.onLayoutFinish.append(self.UpdateComponents)
 
     def UpdateComponents(self):
@@ -595,7 +600,8 @@ Red: Refresh EPG
                             limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
                             if limit < to:  to = limit
                         AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
-                    except: # Use originals on a failure...
+                    except Exception as e:  # Use originals on a failure...
+                        print("[EPGTranslator] translateEPG error:", e)
                         (t_title, t_descr) = (title, descr)
 # We now have the title+descr and t_title+t_descr to display
 # None of the fields should have trailing newlines, so we should know
@@ -833,8 +839,8 @@ def My_setEvent(self, event):
 # getServiceName() results.
 #
     uref = make_uref(event.getEventId(), self.currentService.getServiceName())
-    (title, descr) = AfCache.fetch(uref)
-    if descr == None:   # Not there...work out what it should be
+    (t_title, t_descr) = AfCache.fetch(uref)
+    if t_descr == None: # Not there...work out what it should be
         try:            # Duck out having set nothing on an error...
 # The current descr will have been put into the self["FullDescription"]
 # and the title into self["epg_eventname"]) ScrollLabel objects in
@@ -849,7 +855,15 @@ def My_setEvent(self, event):
 # Need to handle this the same way here as for translateEPG()
 # Add a common function for this after its working???
 #
-            (desc, prop) = re.findall(prop_matcher, descr)[0]
+            if descr[0] == '[':
+                (prop, desc) = re.findall(begin_matcher, descr)[0]
+                prepend_props = True
+            elif descr[-1] == ']':
+                (desc, prop) = re.findall(end_matcher, descr)[0]
+                prepend_props = False
+            else:
+                desc = descr
+                prop = ''
 
 # We wish to translate the title and description in one call
 # So we:
@@ -863,9 +877,13 @@ def My_setEvent(self, event):
                  str(CfgPlTr.destination.value)
                 )
             (t_sep, t_rest) = t_text.split("\n", 1)
-            (title, descr) = t_rest.split("\n" + t_sep + "\n", 1)
+            (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
             if prop != "":
-                descr += " " + prop
+# prop will contain the "correct" trailing/whitespace
+                if prepend_props:
+                    t_descr = prop + t_descr
+                else:
+                    t_descr = t_descr + prop
 
 # ...and add that to the cache
 #
@@ -879,17 +897,18 @@ def My_setEvent(self, event):
                 limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
                 if limit < to:  to = limit
             AfCache.add(uref, (title, descr), abs_timeout=to)
-        except:
+        except Exception as e:
+            print("[EPGTranslator] My_setEvent error:", e)
             return      # Do nothing on any failure
 
 # We have a set of translations now.
 # Different skins use different fields for these data, so
 # populate both for each.
 #
-    self.setTitle(title)
-    self["epg_eventname"].setText(title)
-    self["FullDescription"].setText(descr)
-    self["summary_description"].setText(descr)
+    self.setTitle(t_title)
+    self["epg_eventname"].setText(t_title)
+    self["FullDescription"].setText(t_descr)
+    self["summary_description"].setText(t_descr)
 
 ##################################################################
 # Intercepting code for EventViewBase __init__()

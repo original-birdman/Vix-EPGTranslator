@@ -142,7 +142,7 @@ enigma2-plugin-extensions-translator_2.0-rc2_all.ipk
     https://www.world-of-satellite.com/showthread.php?31010-EPG-translator-(download-thread)&p=507698&viewfull=1#post507698
 Added the 2.01-rc3 tag.
 
-========== 2.01-rc3
+========== 2.01-rc4
 
 plugin.py
     Added a regex handler for [] groups being at the start of a
@@ -154,4 +154,16 @@ plugin.py
 control
     Built ipk
     Added the 2.01-rc4 tag
-    
+
+========== 2.01-rc5
+
+plugin.py
+    Add Mozilla/5.0 compat to User Agent string
+    Version now shown in configuration menu.
+    Raised encoded text length limit from 2000 to 7000 after testing
+    what was allowed.
+    Add "debug" print statements to some except clauses, so oddities
+    can be recorded.
+    Fixed My_setEvent() to use the new begin_matcher+end_matcher
+    regexes.
+    Updated version tag to 2.01-rc5
