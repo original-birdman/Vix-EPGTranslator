@@ -400,12 +400,12 @@ Red: Refresh EPG
 #   self.session.nav.getCurrentlyPlayingServiceOrGroup().isPlayback()
 # as the test as that isPlayback() is Vix-specific
 #
-        self.inPlayBack = "0:0:0:0:0:0:0:0:0" in self.my_Sref().toCompareString()
+        self.inPlayBack = "0:0:0:0:0:0:0:0:0" in self.My_Sref().toCompareString()
 
 # Add the channel name.
         wintitle = 'EPG Translator'
         try:
-            cur_serv = self.my_Sref().getServiceName()
+            cur_serv = self.My_Sref().getServiceName()
             wintitle += " - " + cur_serv
         except:
             pass
@@ -457,7 +457,7 @@ Red: Refresh EPG
     def __serviceTuned(self):
         wintitle = 'EPG Translator'
         try:
-            cur_serv = self.my_Sref().getServiceName()
+            cur_serv = self.My_Sref().getServiceName()
             wintitle += " - " + cur_serv
         except:
             pass
@@ -467,7 +467,7 @@ Red: Refresh EPG
 # Get the ServiceRef for the current object
 # We do this in several places
 #
-    def my_Sref(self):
+    def My_Sref(self):
         service = self.session.nav.getCurrentService()
         info = service.info()
         return eServiceReference(info.getInfoString(iServiceInformation.sServiceref))
@@ -601,7 +601,7 @@ Red: Refresh EPG
                             if limit < to:  to = limit
                         AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
                     except Exception as e:  # Use originals on a failure...
-                        print("[EPGTranslator] translateEPG error:", e)
+                        print("[EPGTranslator-Plugin] translateEPG error:", e)
                         (t_title, t_descr) = (title, descr)
 # We now have the title+descr and t_title+t_descr to display
 # None of the fields should have trailing newlines, so we should know
@@ -658,7 +658,7 @@ Red: Refresh EPG
                     Servname = ename
                     dur = curEvent.getDuration()
                 else:
-                    ename = self.my_Sref().getServiceName()
+                    ename = self.My_Sref().getServiceName()
                     Servname = ename
             except:
                 pass
@@ -681,7 +681,7 @@ Red: Refresh EPG
             t_now = int(time.time())
             epg_base = t_now - 60*int(config.epg.histminutes.value)
             epg_extent = 86400*14   # Get up to 14 days from now
-            test = [ EPG_OPTIONS, (self.my_Sref().toCompareString(), 0, epg_base, epg_extent) ]
+            test = [ EPG_OPTIONS, (self.My_Sref().toCompareString(), 0, epg_base, epg_extent) ]
             epgcache = eEPGCache.getInstance()
             self.list = epgcache.lookupEvent(test)
             self.max = len(self.list)
@@ -829,7 +829,10 @@ def My_setEvent(self, event):
 
 # ... but if we are translating we need to change the text which
 # the orig_EVB_setEvent() call above has set.
+# As long as there is an event...
 #
+    if event is None or not hasattr(event, 'getEventName'):
+        return
 
 # Do we already have the translation for this lang/eventID/Service?
 # If so, just use what we already have.
@@ -842,14 +845,19 @@ def My_setEvent(self, event):
     (t_title, t_descr) = AfCache.fetch(uref)
     if t_descr == None: # Not there...work out what it should be
         try:            # Duck out having set nothing on an error...
-# The current descr will have been put into the self["FullDescription"]
-# and the title into self["epg_eventname"]) ScrollLabel objects in
-# EventViewBase.setEvent().
-# So get them from there and translate them
-# Whether the translation is actually displayed depends on the skin.
-# Whereas all(?) show FullDescription, some use Title for epg_eventname
+
+# You may need to lookup in EventBase.setEvent to see how these fields
+# are used and so how you can get the text to translate.
+# On all distros (ATV PLi Vix eight):
+#   o The current descr will have been put into the self["FullDescription"]
+#     ScrollLabel object in all distros.
+#   o The current title will have been set as the Title 
 #
-            title = self["epg_eventname"].getText().strip()
+# So get them from there and translate them
+# Where the translations actually needs to be installed is
+# version-dependent - see the end of this function.
+#
+            title = self.getTitle().strip()
             descr = self["FullDescription"].getText().strip()
 
 # Need to handle this the same way here as for translateEPG()
@@ -898,17 +906,31 @@ def My_setEvent(self, event):
                 if limit < to:  to = limit
             AfCache.add(uref, (title, descr), abs_timeout=to)
         except Exception as e:
-            print("[EPGTranslator] My_setEvent error:", e)
+            print("[EPGTranslator-Plugin] My_setEvent error:", e)
             return      # Do nothing on any failure
 
 # We have a set of translations now.
 # Different skins use different fields for these data, so
 # populate both for each.
 #
+# What needs to be set is distro-dependent
+#
+#    self["what"]            set to              distro
+#   epg_description         title + extended    All
+#   epg_eventname           title               Vix, PLi
+#   summary_description     extended            Vix
+#   FullDescription         extended            All
+#   setTitle()              title               All
+#
+    if "epg_description" in self:
+        self["epg_description"].setText(t_title + "\n\n" + t_descr)
+    if "epg_eventname" in self:
+        self["epg_eventname"].setText(t_title)
+    if "summary_description" in self:
+        self["summary_description"].setText(t_descr)
+    if "FullDescription" in self:
+        self["FullDescription"].setText(t_descr)
     self.setTitle(t_title)
-    self["epg_eventname"].setText(t_title)
-    self["FullDescription"].setText(t_descr)
-    self["summary_description"].setText(t_descr)
 
 ##################################################################
 # Intercepting code for EventViewBase __init__()

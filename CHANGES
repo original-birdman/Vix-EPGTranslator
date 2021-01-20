@@ -171,3 +171,14 @@ plugin.py
 control
     Built ipk
     Added the 2.01-rc5 tag to git
+
+========== 2.01-rc6
+
+plugin.py
+    Rename my_Sref() to my_Sref() for a consistent use of My.
+    Change debug print tags from EPGTranslator to EPGTranslator-Plugin,
+    to make clear this is happening in a plugin.
+    If we don't have an Event or 'getEventName' in the Event then don't
+    try to do anything. Otherwise we'll get a crash.
+    Change My_setEvent() to set all known possible text fields in the
+    event, but only if the tag exists.
