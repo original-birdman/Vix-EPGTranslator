@@ -174,7 +174,6 @@ control
 
 ========== 2.01-rc6
 
-plugin.py
     Rename my_Sref() to my_Sref() for a consistent use of My.
     Change debug print tags from EPGTranslator to EPGTranslator-Plugin,
     to make clear this is happening in a plugin.
@@ -182,3 +181,9 @@ plugin.py
     try to do anything. Otherwise we'll get a crash.
     Change My_setEvent() to set all known possible text fields in the
     event, but only if the tag exists.
+
+plugin.py
+control
+    Updated version tag to 2.01-rc6
+    Built ipk
+    Added the 2.01-rc6 tag to git
