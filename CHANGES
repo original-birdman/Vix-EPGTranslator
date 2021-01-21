@@ -194,3 +194,6 @@ control
 plugin.py
     Add global split_off_props() function for the common functionality,
     and in it check that descr contains text before checking descr[0].
+
+plugin.py
+    In My_setEvent cache the translated text, NOT the original text!

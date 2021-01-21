@@ -900,7 +900,7 @@ def My_setEvent(self, event):
             if CfgPlTr.timeout_hr.value > 0:
                 limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
                 if limit < to:  to = limit
-            AfCache.add(uref, (title, descr), abs_timeout=to)
+            AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
         except Exception as e:
             print("[EPGTranslator-Plugin] My_setEvent error:", e)
             return      # Do nothing on any failure
