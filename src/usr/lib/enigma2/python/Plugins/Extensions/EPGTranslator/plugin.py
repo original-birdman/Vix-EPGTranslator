@@ -3,7 +3,7 @@
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.0-rc6"
+EPGTrans_vers = "2.0-rc5"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
@@ -226,6 +226,60 @@ def make_uref(sv_id, sv_name, lang=None):
 def lang_flag(lang):    # Where the language images are
     return '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + lang  + '.png'
 
+
+# Code to split off the [] properties from a description using regular
+# expressions. Used from two different classes.
+#
+# A regular expression to remove [xx(,xx)] tags from the start of a
+# description.
+# Also the compiled pattern to it.
+#
+begin_props = """
+(                           # Start all [] groups saving
+ (?:\[                      # Start a group
+  (?:[^,]+,)*               # Leading tags (trailing ,)
+  (?:[^,]+)                 # final tag (no ,)
+  \]\s*                     # end a prop
+ )*                         # end a group - and repeat
+\s?)                        # End all [] groups saving
+(.*)                        # The real description
+"""
+
+# A regular expression to remove [xx(,xx)] tags from the end of a
+# description.
+# Also the compiled pattern to it.
+#
+
+end_props = """
+(.*?)                       # The real description
+\s*                         # Optional whitespace
+(                           # Start all [] groups saving
+ (?:\[                      # Start a group
+  (?:[^,]+,)*               # Leading tags (trailing ,)
+  (?:[^,]+)                 # final tag (no ,)
+  \]\s*                     # end a prop
+ )*                         # end a group - and repeat
+)                           # End all [] groups saving
+\s*$                        # to EOL and RE options
+"""
+begin_matcher = re.compile(begin_props, flags=re.X|re.S)
+end_matcher = re.compile(end_props, flags=re.X|re.S)
+
+# The actual function
+#
+def split_off_props(descr):
+    desc = descr
+    prop = ''
+    prepend_props = False
+# Only check for props if we actually have a descr
+    if len(descr) > 0:
+        if descr[0] == '[':
+            (prop, desc) = re.findall(begin_matcher, descr)[0]
+            prepend_props = True
+        elif descr[-1] == ']':
+            (desc, prop) = re.findall(end_matcher, descr)[0]
+    return (desc, prop, prepend_props)
+
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 # Our classes
 #
@@ -274,41 +328,6 @@ class translatorConfig(ConfigListScreen, Screen):
         return
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-
-# A regular expression to remove [xx(,xx)] tags from the start of a
-# description.
-# Also the compiled pattern to it.
-#
-begin_props = """
-(                           # Start all [] groups saving
- (?:\[                      # Start a group
-  (?:[^,]+,)*               # Leading tags (trailing ,)
-  (?:[^,]+)                 # final tag (no ,)
-  \]\s*                     # end a prop
- )*                         # end a group - and repeat
-\s?)                        # End all [] groups saving
-(.*)                        # The real description
-"""
-
-# A regular expression to remove [xx(,xx)] tags from the end of a
-# description.
-# Also the compiled pattern to it.
-#
-
-end_props = """
-(.*?)                       # The real description
-\s*                         # Optional whitespace
-(                           # Start all [] groups saving
- (?:\[                      # Start a group
-  (?:[^,]+,)*               # Leading tags (trailing ,)
-  (?:[^,]+)                 # final tag (no ,)
-  \]\s*                     # end a prop
- )*                         # end a group - and repeat
-)                           # End all [] groups saving
-\s*$                        # to EOL and RE options
-"""
-begin_matcher = re.compile(begin_props, flags=re.X|re.S)
-end_matcher = re.compile(end_props, flags=re.X|re.S)
 
 # A string to use as a separator when the title and description are
 # combined for a one-call translation.
@@ -553,19 +572,8 @@ Red: Refresh EPG
 # translated (e.g. for en -> de [S,AD] -> [TRAURIG]).
 # So strip any such trailers before sending for translation then append
 # them to the result.
-# We use a regex to match the two groups. The Python documentation
-# for a multi-group match makes no sense. This is what seems to work....
-# Only do this for a description that starts with [ or ends with ]
 #
-                    if descr[0] == '[':
-                        (prop, desc) = re.findall(begin_matcher, descr)[0]
-                        prepend_props = True
-                    elif descr[-1] == ']':
-                        (desc, prop) = re.findall(end_matcher, descr)[0]
-                        prepend_props = False
-                    else:
-                        desc = descr
-                        prop = ''
+                    (desc, prop, prepend_props) = split_off_props(descr)
 
 # We wish to translate the title and description in one call
 # So we:
@@ -859,19 +867,7 @@ def My_setEvent(self, event):
 #
             title = self.getTitle().strip()
             descr = self["FullDescription"].getText().strip()
-
-# Need to handle this the same way here as for translateEPG()
-# Add a common function for this after its working???
-#
-            if descr[0] == '[':
-                (prop, desc) = re.findall(begin_matcher, descr)[0]
-                prepend_props = True
-            elif descr[-1] == ']':
-                (desc, prop) = re.findall(end_matcher, descr)[0]
-                prepend_props = False
-            else:
-                desc = descr
-                prop = ''
+            (desc, prop, prepend_props) = split_off_props(descr)
 
 # We wish to translate the title and description in one call
 # So we:
