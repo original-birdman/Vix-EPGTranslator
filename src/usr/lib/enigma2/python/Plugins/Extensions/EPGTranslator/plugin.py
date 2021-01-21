@@ -3,7 +3,7 @@
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.0-rc5"
+EPGTrans_vers = "2.0-rc7"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
@@ -859,7 +859,7 @@ def My_setEvent(self, event):
 # On all distros (ATV PLi Vix eight):
 #   o The current descr will have been put into the self["FullDescription"]
 #     ScrollLabel object in all distros.
-#   o The current title will have been set as the Title 
+#   o The current title will have been set as the Title
 #
 # So get them from there and translate them
 # Where the translations actually needs to be installed is

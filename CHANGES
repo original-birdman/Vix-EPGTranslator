@@ -197,3 +197,9 @@ plugin.py
 
 plugin.py
     In My_setEvent cache the translated text, NOT the original text!
+
+plugin.py
+control
+    Updated version tag to 2.01-rc7
+    Built ipk
+    Added the 2.01-rc7 tag to git
