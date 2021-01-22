@@ -1,10 +1,10 @@
 Added files to the git repository.
 
-========== 2.0 [21 Dec 2020]
+========== 2.0 STARTS [21 Dec 2020]
 
 Added build ipk package for 2.0
 
-========== 2.0+ipk [21 Dec 2020]
+========== 2.0+ipk STARTS [21 Dec 2020]
 
 README + Dev branch
     Added Dev branch and updated README to mention it
@@ -45,7 +45,7 @@ plugin.py
     Add code to intercept EventView pop-ups and add translations there
     toggled by the Text key.
 
-========== 2.01-rc1 [11 Jan 2021]
+========== 2.01-rc1 STARTS [11 Jan 2021]
 
 
 AutoflushCache.py
@@ -68,7 +68,7 @@ plugin.py
 *-2.01-rc1.ipk
     Built....
 
-========== 2.01-rc2 [13 Jan 2021]
+========== 2.01-rc2 STARTS [13 Jan 2021]
 
 Skin_medium.py
 Skin_small.py
@@ -94,7 +94,7 @@ README
 *-2.01-rc2.ipk
     Built 2.01-rc2.ipk.  2.01-rc1.ipk removed.
 
-========== 2.01-rc3
+========== 2.01-rc3 STARTS
 
 Skin_medium.py
 Skin_small.py
@@ -142,7 +142,7 @@ enigma2-plugin-extensions-translator_2.0-rc2_all.ipk
     https://www.world-of-satellite.com/showthread.php?31010-EPG-translator-(download-thread)&p=507698&viewfull=1#post507698
 Added the 2.01-rc3 tag.
 
-========== 2.01-rc4
+========== 2.01-rc4 STARTS
 
 plugin.py
     Added a regex handler for [] groups being at the start of a
@@ -155,7 +155,7 @@ control
     Built ipk
     Added the 2.01-rc4 tag
 
-========== 2.01-rc5
+========== 2.01-rc5 STARTS
 
 plugin.py
     Add Mozilla/5.0 compat to User Agent string
@@ -172,7 +172,7 @@ control
     Built ipk
     Added the 2.01-rc5 tag to git
 
-========== 2.01-rc6
+========== 2.01-rc6 STARTS
 
 plugin.py
     Rename my_Sref() to my_Sref() for a consistent use of My.
@@ -189,7 +189,7 @@ control
     Built ipk
     Added the 2.01-rc6 tag to git
 
-========== 2.01-rc7
+========== 2.01-rc7 STARTS
 
 plugin.py
     Add global split_off_props() function for the common functionality,
@@ -204,7 +204,7 @@ control
     Built ipk
     Added the 2.01-rc7 tag to git
 
-========== 2.01-rc8
+========== 2.01-rc8 STARTS
 
 Skin_medium.py
 Skin_small.py
@@ -213,3 +213,9 @@ plugin.py
     displayed once.
     Allow () property groups as well as []
     Do not show property groups in right-to-left translations.
+
+plugin.py
+control
+    Updated version tag to 2.01-rc8
+    Built ipk
+    Added the 2.01-rc8 tag to git
