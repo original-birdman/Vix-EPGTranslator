@@ -27,21 +27,22 @@ class MySkinData:
     translatorMain_skin = """
         <screen position="center,80" size="1000,610" title="EPG Translator">
             <ePixmap position="0,0" size="1000,50" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/translator.png" alphatest="blend" zPosition="1" />
-            <ePixmap position="10,6" size="36,36" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/buttons/blue.png" alphatest="blend" zPosition="2" />
-            <ePixmap position="10,26" size="36,36" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/buttons/yellow.png" alphatest="blend" zPosition="2" />
+            <ePixmap position="10,6" size="18,18" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/buttons/blue.png" alphatest="blend" zPosition="2" />
+            <ePixmap position="10,26" size="18,18" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/buttons/yellow.png" alphatest="blend" zPosition="2" />
             <widget name="label" position="34,6" size="200,20" font="Regular;16" foregroundColor="black" backgroundColor="#FFFFFF" halign="left" transparent="1" zPosition="2" />
             <widget name="label2" position="34,26" size="200,20" font="Regular;16" foregroundColor="black" backgroundColor="#FFFFFF" halign="left" transparent="1" zPosition="2" />
             <widget render="Label" source="global.CurrentTime" position="740,0" size="240,50" font="Regular;24" foregroundColor="#697178" backgroundColor="#FFFFFF" halign="right" valign="center" zPosition="2">
-            <convert type="ClockToText">Format:%H:%M:%S</convert>
+                <convert type="ClockToText">Format:%H:%M:%S</convert>
             </widget>
-            <widget name="flag" position="10,40" size="288,288" alphatest="blend" zPosition="1" />
-            <widget name="flag2" position="10,325" size="288,288" alphatest="blend" zPosition="1" />
-            <widget name="text" position="308,60" size="750,{size}" font="Regular;24" halign="left" zPosition="2" />
-            <widget name="text2" position="308,345" size="750,270" font="Regular;24" halign="left" zPosition="1" />
+            <widget name="timing" position="308,55" size="750,32" foregroundColor="orange" font="Bold;24" halign="left" zPosition="1" />
+            <widget name="flag" position="10,90" size="288,288" alphatest="blend" zPosition="1" />
+            <widget name="text" position="308,90" size="750,{size}" font="Regular;24" halign="left" zPosition="2" />
+            <widget name="flag2" position="10,350" size="288,288" alphatest="blend" zPosition="1" />
+            <widget name="text2" position="308,350" size="750,255" font="Regular;24" halign="left" zPosition="1" />
         </screen>
         """
-    tMyes = "270"
-    tMno  = "555"
+    tMyes = "255"
+    tMno  = "515"
 
 
 MySD = MySkinData()

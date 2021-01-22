@@ -203,3 +203,13 @@ control
     Updated version tag to 2.01-rc7
     Built ipk
     Added the 2.01-rc7 tag to git
+
+========== 2.01-rc8
+
+Skin_medium.py
+Skin_small.py
+plugin.py
+    Move time and duration or programme into own window, so it is only
+    displayed once.
+    Allow () property groups as well as []
+    Do not show property groups in right-to-left translations.

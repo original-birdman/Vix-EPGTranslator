@@ -97,6 +97,8 @@ langs =  [
 ('ur', _('Urdu')),              ('vi', _('Vietnamese')),        ('cy', _('Welsh'))
 ]
 
+rtol = {'ar', 'fa', 'ur'}
+
 # Source has an auto option in first place on the list
 #
 config.plugins.translator = ConfigSubsection()
@@ -231,22 +233,24 @@ def lang_flag(lang):    # Where the language images are
 # expressions. Used from two different classes.
 #
 # A regular expression to remove [xx(,xx)] tags from the start of a
-# description.
+# description. Also now allows for (..) ones to be in it.
 # Also the compiled pattern to it.
 #
 begin_props = """
 (                           # Start all [] groups saving
- (?:\[                      # Start a group
+ (?:                        # Start a group
+  (?:\[|\()                 # Opening [ or )
   (?:[^,]+,)*               # Leading tags (trailing ,)
   (?:[^,]+)                 # final tag (no ,)
-  \]\s*                     # end a prop
+  (?:\]|\))\s*              # closing ] or ) (end a prop)
  )*                         # end a group - and repeat
 \s?)                        # End all [] groups saving
 (.*)                        # The real description
 """
+begin_matcher = re.compile(begin_props, flags=re.X|re.S)
 
 # A regular expression to remove [xx(,xx)] tags from the end of a
-# description.
+# description. Also now allows for (..) ones to be in it.
 # Also the compiled pattern to it.
 #
 
@@ -254,15 +258,16 @@ end_props = """
 (.*?)                       # The real description
 \s*                         # Optional whitespace
 (                           # Start all [] groups saving
- (?:\[                      # Start a group
+ (?:                        # Start a group
+  (?:\[|\()                 # Opening [ or )
   (?:[^,]+,)*               # Leading tags (trailing ,)
   (?:[^,]+)                 # final tag (no ,)
-  \]\s*                     # end a prop
+  (?:\]|\))\s*              # closing ] or ) (end a prop)
  )*                         # end a group - and repeat
+ (?:\s*S\d+\s*Ep\d+)?       # UK ITV can have a trailing Sn Epn
 )                           # End all [] groups saving
 \s*$                        # to EOL and RE options
 """
-begin_matcher = re.compile(begin_props, flags=re.X|re.S)
 end_matcher = re.compile(end_props, flags=re.X|re.S)
 
 # The actual function
@@ -276,7 +281,8 @@ def split_off_props(descr):
         if descr[0] == '[':
             (prop, desc) = re.findall(begin_matcher, descr)[0]
             prepend_props = True
-        elif descr[-1] == ']':
+# Look for ] towards the end, to allow for UK ITV Sn Epn
+        elif ']' in descr[-12:]:
             (desc, prop) = re.findall(end_matcher, descr)[0]
     return (desc, prop, prepend_props)
 
@@ -377,6 +383,7 @@ Red: Refresh EPG
 
         self['flag'] = Pixmap()
         self['flag2'] = Pixmap()
+        self['timing'] = Label('')
         self['text'] = ScrollLabel('')
         self['text2'] = ScrollLabel('')
         self['label'] = Label('= Hide')
@@ -550,11 +557,17 @@ Red: Refresh EPG
 # if we hit the exception.
 #
         try:
-            begin=time.strftime("%Y-%m-%d %H:%M\n", time.localtime(int(self.event[epg_B])))
+            begin=time.strftime("%Y-%m-%d %H:%M", time.localtime(int(self.event[epg_B])))
         except:
             begin = ''
         if self.event[epg_D] > 0:
-            duration = "\n\n" + "%d min" % (int(self.event[epg_D]) / 60)
+            plen = (int(self.event[epg_D]) / 60)    # mins
+            if plen >= 60:
+                hr = int(plen/60)
+                plen -= 60*hr
+                duration = "%dh %dm" % (hr, plen)
+            else:
+                duration = "%dm" % (plen)
         else:
             duration = ''
         if do_translate:
@@ -588,10 +601,14 @@ Red: Refresh EPG
                         (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
                         if prop != "":
 # prop will contain the "correct" trailing/whitespace
-                            if prepend_props:
-                                t_descr = prop + t_descr
-                            else:
-                                t_descr = t_descr + prop
+# But ignore them for an rtol language, as it will mess them up (may
+# be messed up anyway, but no need to ensure it).
+#
+                            if self.destination not in rtol:
+                                if prepend_props:
+                                    t_descr = prop + t_descr
+                                else:
+                                    t_descr = t_descr + prop
 
 # Work out a timeout for the result.
 # If we have a specific timeout (in hours) use it, but if this is 0 set
@@ -615,15 +632,13 @@ Red: Refresh EPG
 # None of the fields should have trailing newlines, so we should know
 # where we are.
 #
+# begin + duration is always shown untranslated in its own field
+#
+        self['timing'].setText(begin + " - " + duration)
         tr_text = t_title + "\n\n" + t_descr
-        if self.refresh == False:
-            tr_text = begin + tr_text + duration
         if self.showsource == 'yes':
             or_text = title + "\n\n" + descr
-            if self.refresh == False:
-                self['text'].setText(begin + or_text + duration)
-            else:
-                self['text'].setText(or_text)
+            self['text'].setText(or_text)
             self['text2'].setText(tr_text)
         else:
             self['text'].setText(tr_text)
