@@ -371,8 +371,6 @@ Red: Refresh EPG
         self.session = session
         Screen.__init__(self, session)
 
-        self.source = str(CfgPlTr.source.value)
-        self.destination = str(CfgPlTr.destination.value)
         self.text = text
         self.hideflag = True
         self.refresh = False
@@ -399,7 +397,7 @@ Red: Refresh EPG
 # Add the helptext for the environment language and default destination
 # now
         env_lang_base = language.getLanguage().partition("_")[0]
-        for lang in (env_lang_base, self.destination):
+        for lang in (env_lang_base, CfgPlTr.destination.value):
             if lang not in self.helptext:
                 self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
 
@@ -463,8 +461,8 @@ Red: Refresh EPG
 # Set the current country flags as the screen displays
 #
     def onLayoutFinished(self):
-        source = lang_flag(self.source)
-        destination = lang_flag(self.destination)
+        source = lang_flag(CfgPlTr.source.value)
+        destination = lang_flag(CfgPlTr.destination.value)
         if self.showsource == 'yes':
             if fileExists(source):
                 self['flag'].instance.setPixmapFromFile(source)
@@ -514,9 +512,9 @@ Red: Refresh EPG
 #
     def get_translation(self, text, from_lg=None, to_lg=None):
         if from_lg != None: source = from_lg
-        else:               source = self.source
+        else:               source = CfgPlTr.source.value
         if to_lg != None:   dest = to_lg
-        else:               dest = self.destination
+        else:               dest = CfgPlTr.destination.value
         return DO_translation(text, source, dest)
 
 # For both translate* calls we strip() any text we are given (consistency)
@@ -604,7 +602,7 @@ Red: Refresh EPG
 # But ignore them for an rtol language, as it will mess them up (may
 # be messed up anyway, but no need to ensure it).
 #
-                            if self.destination not in rtol:
+                            if CfgPlTr.destination.value not in rtol:
                                 if prepend_props:
                                     t_descr = prop + t_descr
                                 else:
@@ -780,13 +778,13 @@ Red: Refresh EPG
 # Use our translation code to get this from the English
 #
         env_lang = language.getLanguage()[:2]
-        for lang in (env_lang, self.destination):
+        for lang in (env_lang, CfgPlTr.destination.value):
             if lang not in self.helptext:
                 self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
         text = "EPG Translator version: " + EPGTrans_vers
         text += "\n\n" + self.helptext[env_lang]
-        if self.helptext[env_lang] != self.helptext[self.destination]:
-            text += "\n\n" + self.helptext[self.destination]
+        if self.helptext[env_lang] != self.helptext[CfgPlTr.destination.value]:
+            text += "\n\n" + self.helptext[CfgPlTr.destination.value]
         self.session.open(MessageBox, text, MessageBox.TYPE_INFO, close_on_any_key=True)
 
     def config(self):

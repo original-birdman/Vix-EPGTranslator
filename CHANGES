@@ -219,3 +219,10 @@ control
     Updated version tag to 2.01-rc8
     Built ipk
     Added the 2.01-rc8 tag to git
+
+========== 2.01-rc9 STARTS
+
+plugin.py
+    Remove self.source and self.destination and replace them throughout
+    by CfgPlTr.source.value and CfgPlTr.destination.value, as the self.*
+    values are not updated after a language change in the config menu.
