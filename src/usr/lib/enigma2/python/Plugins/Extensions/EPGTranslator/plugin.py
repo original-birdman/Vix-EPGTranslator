@@ -47,7 +47,6 @@ else:
 
 # Who we will pretend to be when calling translate.google.com
 #
-# dflt_UA = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:83.0) Gecko/20100101 Firefox/83.0'
 dflt_UA = 'OpenVix EPG Translator (Mozilla/5.0 compat): ' + EPGTrans_vers
 
 # Useful constants for EPG fetching.
@@ -228,62 +227,75 @@ def make_uref(sv_id, sv_name, lang=None):
 def lang_flag(lang):    # Where the language images are
     return '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + lang  + '.png'
 
-
-# Code to split off the [] properties from a description using regular
-# expressions. Used from two different classes.
+# Regular expressions to split off the [] or () properties from a
+# description. Used from two different classes.
 #
-# A regular expression to remove [xx(,xx)] tags from the start of a
-# description. Also now allows for (..) ones to be in it.
-# Also the compiled pattern to it.
+# Make the props pattern usage depend on whether there is a [ within the
+# first 12 characters or a ] within the last 12.
+# For begin_props the last prop group must be [] (not ())
+# For end_props the first prop group must be [] (not ())
+#
+# This will capture one whitespace from *after* the last prop, only if
+# there is one.
+#
+# Also the compiled expression for the patterns.
+#
+# Patterns for matchin [...] and (...)
+# Interpolated into the workign patterns using %s (so look out for them)
+#
+skb_prop = '\[[^\]]*\]'
+par_prop = '\([^\)]*\)'
+
 #
 begin_props = """
-(                           # Start all [] groups saving
- (?:                        # Start a group
-  (?:\[|\()                 # Opening [ or )
-  (?:[^,]+,)*               # Leading tags (trailing ,)
-  (?:[^,]+)                 # final tag (no ,)
-  (?:\]|\))\s*              # closing ] or ) (end a prop)
+^\s*                        # Strip any leading whitespace
+(                           # Start all [] + () groups saving
+ (?:                        # Start multi-groups
+  (?:(?:%s|%s)\s*)          # Either grouping + whitespace
  )*                         # end a group - and repeat
-\s?)                        # End all [] groups saving
+ %s                         # last group - []
+)                           # End all () or [] groups saving
+\s*                         # Skip any intervening whitespace
 (.*)                        # The real description
-"""
+\s*$                        # Strip trailing whitespace to EOL
+""" % (skb_prop, par_prop, skb_prop)
 begin_matcher = re.compile(begin_props, flags=re.X|re.S)
 
-# A regular expression to remove [xx(,xx)] tags from the end of a
-# description. Also now allows for (..) ones to be in it.
-# Also the compiled pattern to it.
-#
-
 end_props = """
-(.*?)                       # The real description
-\s*                         # Optional whitespace
-(                           # Start all [] groups saving
- (?:                        # Start a group
-  (?:\[|\()                 # Opening [ or )
-  (?:[^,]+,)*               # Leading tags (trailing ,)
-  (?:[^,]+)                 # final tag (no ,)
-  (?:\]|\))\s*              # closing ] or ) (end a prop)
+^\s*                        # Strip any leading whitespace
+(.*?)                       # The real description (? else it takes all)
+\s*                         # Skip any intervening whitespace
+(                           # Start all [] + () groups saving
+ %s                         # first group - []
+ \s*                        # Skip any intervening whitespace
+ (?:                        # Start multi-groups
+  (?:(?:%s|%s)\s*)          # Either grouping + whitespace
  )*                         # end a group - and repeat
  (?:\s*S\d+\s*Ep\d+)?       # UK ITV can have a trailing Sn Epn
-)                           # End all [] groups saving
-\s*$                        # to EOL and RE options
-"""
+)                           # End all () or [] groups saving
+\s*$                        # Strip trailing whitespace to EOL
+""" % (skb_prop, skb_prop, par_prop)
 end_matcher = re.compile(end_props, flags=re.X|re.S)
 
-# The actual function
+# The actual function that uses the regexes.
 #
 def split_off_props(descr):
-    desc = descr
+    desc = descr.strip()
     prop = ''
     prepend_props = False
-# Only check for props if we actually have a descr
+# Only check for props if we actually have a description
+# Look for [ towards the beginning, to allow for an opening ()
     if len(descr) > 0:
-        if descr[0] == '[':
-            (prop, desc) = re.findall(begin_matcher, descr)[0]
-            prepend_props = True
+        if '[' in descr[:12]:
+            res = re.findall(begin_matcher, descr)
+            if len(res) > 0:    # Only if findall succeeded
+                (prop, desc) = res[0]
+                prepend_props = True
 # Look for ] towards the end, to allow for UK ITV Sn Epn
         elif ']' in descr[-12:]:
-            (desc, prop) = re.findall(end_matcher, descr)[0]
+            res = re.findall(end_matcher, descr)
+            if len(res) > 0:    # Only if findall succeeded
+                (desc, prop) = res[0]
     return (desc, prop, prepend_props)
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
