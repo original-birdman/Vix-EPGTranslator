@@ -232,3 +232,9 @@ plugin.py
     groups (with the correct end bracket matching the opening one).
     Check for [ within the first 12 characters to allow for an opening
     () group.
+
+plugin.py
+control
+    Updated version tag to 2.01-rc9
+    Built ipk
+    Added the 2.01-rc9 tag to git
