@@ -238,3 +238,8 @@ control
     Updated version tag to 2.01-rc9
     Built ipk
     Added the 2.01-rc9 tag to git
+
+========== 2.01-release
+
+    Push to master thread
+    Added the 2.01-release tag to git
