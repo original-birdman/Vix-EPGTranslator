@@ -1,7 +1,245 @@
 Added files to the git repository.
 
-========== 2.0 [21 Dec 2020]
+========== 2.0 STARTS [21 Dec 2020]
 
 Added build ipk package for 2.0
 
-========== 2.0+ipk [21 Dec 2020]
+========== 2.0+ipk STARTS [21 Dec 2020]
+
+README + Dev branch
+    Added Dev branch and updated README to mention it
+
+plugin.py
+    Added ".decode('utf-8')" to urlopen() call. Needed for Py3, and
+    missed on copying in from test code.
+    Added plugin-source symlink for easier access to source files.
+
+plugin.py
+    Change the test for "no text" in translateText() and translateEPG()
+    and correct the (previously wrong) indentation in the latter.
+
+plugin.py
+    Switch to using epgcache.lookupEvent() to get events (based on EPG
+    TranslatorLite.
+    Get the EPG starting from the normal histminutes previous, rather
+    than just getting all EPG entries (which can go back well beyond
+    that). Then start with the current event.
+
+plugin.py
+    Switch off wrapping at the beginning and end of the displayed list.
+
+plugin.py
+    Change the returns list for epgcache.lookupEvent() to be only those
+    used, and parametrize the handling to robustify any additions or
+    changes.
+
+plugin.py
+    Cache the EPG translations, so that we don't need to redo the web
+    call on a return to a previously-seen item.
+
+plugin.py
+    Move the text translation call into a stand-alone DO_translation()
+    function so that it may be called from anywhere.
+
+plugin.py
+    Add code to intercept EventView pop-ups and add translations there
+    toggled by the Text key.
+
+========== 2.01-rc1 STARTS [11 Jan 2021]
+
+
+AutoflushCache.py
+    Added code to handle cacheing the translations. In its own class.
+
+Skin_medium.py, Skin_small.py
+    (Re)added the label2 item for the Read, clear-cache button
+
+plugin.py
+    Change the User-Agent string to be "EPG Translator" based.
+    Remember all events, not just a (configurable) number.
+    Re-ordered some code.
+    Added cacheing of translated text.
+    Add configurable cacheing timeout.
+    Add red-button handling to clear cache.
+    Add handling of translations for EventView items using the Text
+    button as a toggle.
+    Removed My_EPGSel* functions.
+
+*-2.01-rc1.ipk
+    Built....
+
+========== 2.01-rc2 STARTS [13 Jan 2021]
+
+Skin_medium.py
+Skin_small.py
+    Enlarged the translatorConfig screen.
+    Added the (forgotten) yellow image back to translatorMain.
+
+plugin.py
+    Add lang_flag() function, just to have only one place that knows how
+    to form the pathnames.
+    Don't add ch+/ (or rather "nextBouquet" and "prevBouquet") button
+    bindings if we are viewing a recording, not </>.
+    Use a ServiceEventTracker to call getEPG on service (channel)
+    changes rather than doing this in zapUp/zapDown..  This means we
+    don't try until the new channel is actually tuned it, and so works
+    even when a timeshift is running (the user may be prompted before
+    anything happens).
+    Handle viewing a playback of a recording by creating a hand-crafted
+    EPG with one entry.
+
+README
+    Update the release README to add more detail.
+
+*-2.01-rc2.ipk
+    Built 2.01-rc2.ipk.  2.01-rc1.ipk removed.
+
+========== 2.01-rc3 STARTS
+
+Skin_medium.py
+Skin_small.py
+    Fixed some minor separator geometry issues.
+
+plugin.py
+    Removed [..] trailing props before sending them for translation, and
+    add them back afterwards for display.
+    Prevents en -> de changing [S,AD] to [TRAURIG]
+
+AutoflushCache.py
+    Define, in __init__(), the value to return for "not found" key
+    lookups. This allows the storage of (title, descr) tuples (and
+    other things).
+
+plugin.py
+    Put list() around range()s, for Py3.
+    Reformat language list (to use fewer lines).
+    Update AutoflushCache() calls to store a (title, descr) tuple.
+    Move 2000 char test into the DO_translation() function.
+    Translate both the Title and Description for programmes (still done
+    in a single call to translate.google.com)
+    Replaced the isPlayback() test for being in playback mode, as it's
+    Vix specific.
+    Add a my_Sref() method, as we need a serviceref in a few locations.
+    Add the current service (channel) name to the title in the
+    translator EPG browser.
+    strip() all text we are asked to translate.
+    Append a newline to the begin text, and prepend one to the duration
+    text instead.  Gives consistency.
+    Cater for recordings with no Event info (happens for downloaded
+    files).
+    Add try/except clauses when fetching data to translate so that if
+    something goes wrong we just fail to translate, rather than crash.
+    Change the "EventID" for a recording to be the dev:inode for the
+    recording, rather than its full pathname.
+    In My_setEvent() get the title text from self["epg_eventname"], then
+    update both that and setTitle() with the translation, as skins may
+    be using either.
+
+enigma2-plugin-extensions-translator_2.0-rc2_all.ipk
+    Deleted
+    Dev releases will no longer be put on github.
+    They will be posted here (and later posts)
+    https://www.world-of-satellite.com/showthread.php?31010-EPG-translator-(download-thread)&p=507698&viewfull=1#post507698
+Added the 2.01-rc3 tag.
+
+========== 2.01-rc4 STARTS
+
+plugin.py
+    Added a regex handler for [] groups being at the start of a
+    descripton. Use it if char1 is [, use the end group match if chsar-1
+    is ] and do not matching otherwise.
+    Removed the 3-char limit for an individual tag within [].
+    Updated version tag to 2.01-rc4
+
+control
+    Built ipk
+    Added the 2.01-rc4 tag
+
+========== 2.01-rc5 STARTS
+
+plugin.py
+    Add Mozilla/5.0 compat to User Agent string
+    Version now shown in configuration menu.
+    Raised encoded text length limit from 2000 to 7000 after testing
+    what was allowed.
+    Add "debug" print statements to some except clauses, so oddities
+    can be recorded.
+    Fixed My_setEvent() to use the new begin_matcher+end_matcher
+    regexes.
+    Updated version tag to 2.01-rc5
+
+control
+    Built ipk
+    Added the 2.01-rc5 tag to git
+
+========== 2.01-rc6 STARTS
+
+plugin.py
+    Rename my_Sref() to my_Sref() for a consistent use of My.
+    Change debug print tags from EPGTranslator to EPGTranslator-Plugin,
+    to make clear this is happening in a plugin.
+    If we don't have an Event or 'getEventName' in the Event then don't
+    try to do anything. Otherwise we'll get a crash.
+    Change My_setEvent() to set all known possible text fields in the
+    event, but only if the tag exists.
+
+plugin.py
+control
+    Updated version tag to 2.01-rc6
+    Built ipk
+    Added the 2.01-rc6 tag to git
+
+========== 2.01-rc7 STARTS
+
+plugin.py
+    Add global split_off_props() function for the common functionality,
+    and in it check that descr contains text before checking descr[0].
+
+plugin.py
+    In My_setEvent cache the translated text, NOT the original text!
+
+plugin.py
+control
+    Updated version tag to 2.01-rc7
+    Built ipk
+    Added the 2.01-rc7 tag to git
+
+========== 2.01-rc8 STARTS
+
+Skin_medium.py
+Skin_small.py
+plugin.py
+    Move time and duration or programme into own window, so it is only
+    displayed once.
+    Allow () property groups as well as []
+    Do not show property groups in right-to-left translations.
+
+plugin.py
+control
+    Updated version tag to 2.01-rc8
+    Built ipk
+    Added the 2.01-rc8 tag to git
+
+========== 2.01-rc9 STARTS
+
+plugin.py
+    Remove self.source and self.destination and replace them throughout
+    by CfgPlTr.source.value and CfgPlTr.destination.value, as the self.*
+    values are not updated after a language change in the config menu.
+
+plugin.py
+    Fix split_off_props() and its regexes to trap minimal property
+    groups (with the correct end bracket matching the opening one).
+    Check for [ within the first 12 characters to allow for an opening
+    () group.
+
+plugin.py
+control
+    Updated version tag to 2.01-rc9
+    Built ipk
+    Added the 2.01-rc9 tag to git
+
+========== 2.01-release
+
+    Push to master thread
+    Added the 2.01-release tag to git

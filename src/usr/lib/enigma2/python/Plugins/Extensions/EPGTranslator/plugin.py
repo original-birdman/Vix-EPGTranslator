@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 #
+# So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.0"
+EPGTrans_vers = "2.01-rc9"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
@@ -11,30 +12,32 @@ from Components.Label import Label
 from Components.Language import language
 from Components.Pixmap import Pixmap
 from Components.ScrollLabel import ScrollLabel
-from enigma import eEPGCache, eServiceReference, getDesktop
+from Components.ServiceEventTracker import ServiceEventTracker
+from enigma import eEPGCache, eServiceReference, getDesktop, iPlayableService, iServiceInformation
 from Plugins.Plugin import PluginDescriptor
-from Screens.EventView import EventViewBase
 from Screens.EpgSelection import EPGSelection
+from Screens.EventView import EventViewBase
 from Screens.InfoBar import InfoBar
 from Screens.MessageBox import MessageBox
 from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Tools.Directories import fileExists
 
-from twisted.web.client import getPage
+import socket, sys, re, time, os
 
-import socket, sys, re
+from .AutoflushCache import AutoflushCache
+from .HTML5Entities import name2codepoint
 
 # Imports and defs which are version-dependent
 #
 if sys.version_info[0] == 2:
-# python2 version
+# Python2 version
     from urllib import quote
     from urllib2 import Request, urlopen, URLError, HTTPError
     def dec2utf8(n):         return unichr(n).encode('utf-8')
 
 else:
-# python3 version
+# Python3 version
     from urllib.parse import quote
     from urllib.request import Request, urlopen
     from urllib.error import URLError, HTTPError
@@ -42,101 +45,95 @@ else:
 #
     def dec2utf8(n):         return chr(n)
 
-# Translate HTML Entities (&xxx;) in text
-# The standard python name2codepoint (in htmlentitydefs for py2,
-# html.entities for py3) is incomplete, so we'll use a complete
-# one (which is easy to create).
+# Who we will pretend to be when calling translate.google.com
 #
-def transHTMLEnts(text):
-    from .HTML5Entities import name2codepoint
-    def repl(ent):
-        res = ent.group(0)      # get the text of the match
-        ent = res[1:-1].lower() # Strip & and ;
-        if re.match("#\d+", ent):  # Numeric entity
-            res = dec2utf8(int(ent[1:]))
-        else:
-            try:                    # Look it up...
-                res = dec2utf8(name2codepoint[ent])
-            except:                 # Leave as-is
-                pass
-        return res
+dflt_UA = 'OpenVix EPG Translator (Mozilla/5.0 compat): ' + EPGTrans_vers
 
-    text = re.sub("&.{,30}?;", repl, text)
+# Useful constants for EPG fetching.
+#
+#   B = Event Begin Time
+#   D = Event Duration
+#   T = Event Title
+#   S = Event Short Description
+#   E = Event Extended Description
+#   I = Event Id
+#   N = Service Name
 
-    return str(text)
+EPG_OPTIONS = 'BDTSEINX'    # X is not a returned-value setting
 
-dflt_UA = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:83.0) Gecko/20100101 Firefox/83.0'
+# Now split this into mnemonic indices, skipping any X
+# Then we can use epg_T etc... and means that any change to EPG_OPTIONS
+# is automatically handled
+#
+ci = 0
+for i in list(range(len(EPG_OPTIONS))):
+    if EPG_OPTIONS[i] == 'X': continue
+    exec("epg_%s = %d" % (EPG_OPTIONS[i], ci))
+    ci += 1
 
-config.plugins.translator = ConfigSubsection()
-
-# The list of available languages
+# -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+# Configuration settings.
+#
+# The list of available languages (sorted alphabetically)
 #
 langs =  [
- ('af', _('Afrikaans')),
- ('sq', _('Albanian')),
- ('ar', _('Arabic')),
- ('az', _('Azerbaijani')),
- ('eu', _('Basque')),
- ('be', _('Belarusian')),
- ('bs', _('Bosnian')),
- ('bg', _('Bulgarian')),
- ('ca', _('Catalan')),
- ('ceb', _('Cebuano')),
- ('hr', _('Croatian')),
- ('cs', _('Czech')),
- ('da', _('Danish')),
- ('nl', _('Dutch')),
- ('en', _('English')),
- ('et', _('Estonian')),
- ('tl', _('Filipino')),
- ('fi', _('Finnish')),
- ('fr', _('French')),
- ('gl', _('Galician')),
- ('de', _('German')),
- ('el', _('Greek')),
- ('ht', _('Haitian Creole')),
- ('hu', _('Hungarian')),
- ('is', _('Icelandic')),
- ('id', _('Indonesian')),
- ('ga', _('Irish')),
- ('it', _('Italian')),
- ('jw', _('Javanese')),
- ('lv', _('Latvian')),
- ('lt', _('Lithuanian')),
- ('mk', _('Macedonian')),
- ('ms', _('Malay')),
- ('mt', _('Maltese')),
- ('no', _('Norwegian')),
- ('fa', _('Persian')),
- ('pl', _('Polish')),
- ('pt', _('Portuguese')),
- ('ro', _('Romanian')),
- ('ru', _('Russian')),
- ('sr', _('Serbian')),
- ('sk', _('Slovak')),
- ('sl', _('Slovenian')),
- ('es', _('Spanish')),
- ('sw', _('Swahili')),
- ('sv', _('Swedish')),
- ('tr', _('Turkish')),
- ('uk', _('Ukrainian')),
- ('ur', _('Urdu')),
- ('vi', _('Vietnamese')),
- ('cy', _('Welsh'))
+('af', _('Afrikaans')),         ('sq', _('Albanian')),          ('ar', _('Arabic')),
+('az', _('Azerbaijani')),       ('eu', _('Basque')),            ('be', _('Belarusian')),
+('bs', _('Bosnian')),           ('bg', _('Bulgarian')),         ('ca', _('Catalan')),
+('ceb', _('Cebuano')),          ('hr', _('Croatian')),          ('cs', _('Czech')),
+('da', _('Danish')),            ('nl', _('Dutch')),             ('en', _('English')),
+('et', _('Estonian')),          ('tl', _('Filipino')),          ('fi', _('Finnish')),
+('fr', _('French')),            ('gl', _('Galician')),          ('de', _('German')),
+('el', _('Greek')),             ('ht', _('Haitian Creole')),    ('hu', _('Hungarian')),
+('is', _('Icelandic')),         ('id', _('Indonesian')),        ('ga', _('Irish')),
+('it', _('Italian')),           ('jw', _('Javanese')),          ('lv', _('Latvian')),
+('lt', _('Lithuanian')),        ('mk', _('Macedonian')),        ('ms', _('Malay')),
+('mt', _('Maltese')),           ('no', _('Norwegian')),         ('fa', _('Persian')),
+('pl', _('Polish')),            ('pt', _('Portuguese')),        ('ro', _('Romanian')),
+('ru', _('Russian')),           ('sr', _('Serbian')),           ('sk', _('Slovak')),
+('sl', _('Slovenian')),         ('es', _('Spanish')),           ('sw', _('Swahili')),
+('sv', _('Swedish')),           ('tr', _('Turkish')),           ('uk', _('Ukrainian')),
+('ur', _('Urdu')),              ('vi', _('Vietnamese')),        ('cy', _('Welsh'))
 ]
+
+rtol = {'ar', 'fa', 'ur'}
 
 # Source has an auto option in first place on the list
 #
-config.plugins.translator.source = ConfigSelection(default='auto',
+config.plugins.translator = ConfigSubsection()
+
+# So we can use this to simplify (shorten) the rest of the code
+#
+CfgPlTr = config.plugins.translator
+
+CfgPlTr.source = ConfigSelection(default='auto',
  choices=[ ( 'auto', _('Detect Language')) ] + langs[:] )
 
 # Destination has no auto...
 #
-config.plugins.translator.destination = ConfigSelection(default='en',
- choices=langs)
-config.plugins.translator.maxevents = ConfigInteger(20, (2, 999))
-config.plugins.translator.showsource = ConfigSelection(default='yes',
+CfgPlTr.destination = ConfigSelection(default='en', choices=langs)
+CfgPlTr.timeout_hr = ConfigInteger(0, (0, 350))
+CfgPlTr.showsource = ConfigSelection(default='yes',
  choices=[('yes', _('Yes')), ('no', _('No'))])
+
+# Now we have the config vars, create an AutoflushCache to hold the
+# translations. We are storing tuples, so give a suitable null_return
+#
+AfCache = AutoflushCache(CfgPlTr.timeout_hr.value, null_return=(None, None))
+
+# Get the skin settings etc. that are dependent on screen size.
+# If the screen size isn't (always a) constant between Vix start-ups
+# then this call will need to go into the __init__ defs of each class
+# that needs to use MySD instead, and save that to (and use) self.MySD.
+#
+if getDesktop(0).size().width() <= 1280:
+    exec("from .Skin_small import MySD")
+else:
+    exec("from .Skin_medium import MySD")
+
+# -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+# Global functions
+#
 
 # Interpolate dynamic values using {xxx}.
 # Used for skins, where time formats may contain %H:%M etc...,
@@ -150,17 +147,159 @@ def applySkinVars(skin, dict):
             print(e, '@key=', key)
     return skin
 
-# Get the skin settings etc. that are dependent on screen size.
-# If the screen size isn't (always a) constant between Vix start-ups
-# then this call will need to go into the __init__ defs of each class
-# that needs to use MySD instead, and save that to (and use) self.MySD.
+# Translate HTML Entities (&xxx;) in text
+# The standard python name2codepoint (in htmlentitydefs for Py2,
+# html.entities for Py3) is incomplete, so we'll use a complete
+# one (which is easy to create).
 #
-if getDesktop(0).size().width() <= 1280:
-    exec("from .Skin_small import MySD")
-else:
-    exec("from .Skin_medium import MySD")
+def transHTMLEnts(text):
+    def repl(ent):              # The code for re.sub to run on matches
+        res = ent.group(0)      # get the text of the match
+        ent = res[1:-1].lower() # Strip & and ;
+        if re.match("#\d+", ent):  # Numeric entity
+            res = dec2utf8(int(ent[1:]))
+        else:
+            try:                    # Look it up...
+                res = dec2utf8(name2codepoint[ent])
+            except:                 # Leave as-is
+                pass
+        return res
+    text = re.sub("&.{,30}?;", repl, text)
+    return str(text)
 
-# -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+# The routine to actually translate the text.
+# This is NOT an object method, so that it can be called from "anywhere"
+# This routine expects to get normal ("raw") text and will return the
+# same.
+# So *it* knows about URL encoding and HTMLEntity translation, so that
+# the callers do not need to.
+#
+def DO_translation(text, source, dest):     # source, dest are langs
+
+    text = quote(text)  # url-encode the text ("quote" is a misnomer)
+# The actual limit for this is 7656~7707
+# Could add code to split the query (on a suitable boundary, into
+# similar request sizes) beyond that.
+#
+    if len(text) > 7000: text = text[0:7000]    # Need limit for uri
+
+# The /m url produces a smaller result to the "full" (/) page.
+# It also (more importantly) actually returns the translated text!
+#
+    url = 'https://translate.google.com/m?&sl=%s&tl=%s&q=%s' % (source, dest, text)
+    agents = {'User-Agent': dflt_UA}
+
+# We'll extract the result from the returned web-page
+# This is currently (07 Dec 2020) in a div with its last item making it
+# a result-container...and we want everything up to the end of the div
+# A hack (we don't parse the entire HTML), but simple.
+#
+    before_trans = 'class="result-container">'
+    end_trans = '</div>'
+    request = Request(url, headers=agents)
+    try:
+# Ensure the result is marked as utf-8 (Py2 needs it, Py3 doesn't, but
+# doesn't object to the usage).
+#
+        output = urlopen(request, timeout=20).read().decode('utf-8')
+        data = output[output.find(before_trans) + len(before_trans):]
+        newtext = data.split(end_trans)[0]
+        newtext = transHTMLEnts(newtext)
+    except URLError as e:
+        newtext = 'URL Error: ' + str(e.reason)
+    except HTTPError as e:
+        newtext = 'HTTP Error: ' + str(e.code)
+    except socket.error as e:
+        newtext = 'Socket Error: ' + str(e)
+    return newtext
+
+# Create a reference key for the cache.
+# Done in one place to ensure consistency.
+# Not a class method as it is called from multiple classes
+# (Can't set lang=CfgPlTr.destination.value in the def() as that
+# only gets evaluated once at set-up)
+#
+def make_uref(sv_id, sv_name, lang=None):
+    if lang == None:
+        lang=CfgPlTr.destination.value
+    return ":".join([lang, str(sv_id), str(sv_name)])
+
+def lang_flag(lang):    # Where the language images are
+    return '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + lang  + '.png'
+
+# Regular expressions to split off the [] or () properties from a
+# description. Used from two different classes.
+#
+# Make the props pattern usage depend on whether there is a [ within the
+# first 12 characters or a ] within the last 12.
+# For begin_props the last prop group must be [] (not ())
+# For end_props the first prop group must be [] (not ())
+#
+# This will capture one whitespace from *after* the last prop, only if
+# there is one.
+#
+# Also the compiled expression for the patterns.
+#
+# Patterns for matchin [...] and (...)
+# Interpolated into the workign patterns using %s (so look out for them)
+#
+skb_prop = '\[[^\]]*\]'
+par_prop = '\([^\)]*\)'
+
+#
+begin_props = """
+^\s*                        # Strip any leading whitespace
+(                           # Start all [] + () groups saving
+ (?:                        # Start multi-groups
+  (?:(?:%s|%s)\s*)          # Either grouping + whitespace
+ )*                         # end a group - and repeat
+ %s                         # last group - []
+)                           # End all () or [] groups saving
+\s*                         # Skip any intervening whitespace
+(.*)                        # The real description
+\s*$                        # Strip trailing whitespace to EOL
+""" % (skb_prop, par_prop, skb_prop)
+begin_matcher = re.compile(begin_props, flags=re.X|re.S)
+
+end_props = """
+^\s*                        # Strip any leading whitespace
+(.*?)                       # The real description (? else it takes all)
+\s*                         # Skip any intervening whitespace
+(                           # Start all [] + () groups saving
+ %s                         # first group - []
+ \s*                        # Skip any intervening whitespace
+ (?:                        # Start multi-groups
+  (?:(?:%s|%s)\s*)          # Either grouping + whitespace
+ )*                         # end a group - and repeat
+ (?:\s*S\d+\s*Ep\d+)?       # UK ITV can have a trailing Sn Epn
+)                           # End all () or [] groups saving
+\s*$                        # Strip trailing whitespace to EOL
+""" % (skb_prop, skb_prop, par_prop)
+end_matcher = re.compile(end_props, flags=re.X|re.S)
+
+# The actual function that uses the regexes.
+#
+def split_off_props(descr):
+    desc = descr.strip()
+    prop = ''
+    prepend_props = False
+# Only check for props if we actually have a description
+# Look for [ towards the beginning, to allow for an opening ()
+    if len(descr) > 0:
+        if '[' in descr[:12]:
+            res = re.findall(begin_matcher, descr)
+            if len(res) > 0:    # Only if findall succeeded
+                (prop, desc) = res[0]
+                prepend_props = True
+# Look for ] towards the end, to allow for UK ITV Sn Epn
+        elif ']' in descr[-12:]:
+            res = re.findall(end_matcher, descr)
+            if len(res) > 0:    # Only if findall succeeded
+                (desc, prop) = res[0]
+    return (desc, prop, prepend_props)
+
+# -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+# Our classes
 #
 class translatorConfig(ConfigListScreen, Screen):
 
@@ -168,36 +307,38 @@ class translatorConfig(ConfigListScreen, Screen):
         self.skin = MySD.translatorConfig_skin
         Screen.__init__(self, session)
         self['flag'] = Pixmap()
-        list = []
-        list.append(getConfigListEntry(_('Source Language:'), config.plugins.translator.source))
-        list.append(getConfigListEntry(_('Destination Language:'), config.plugins.translator.destination))
-        list.append(getConfigListEntry(_('Maximum EPG Events:'), config.plugins.translator.maxevents))
-        list.append(getConfigListEntry(_('Show Source EPG:'), config.plugins.translator.showsource))
-
+        list = [
+            getConfigListEntry(_('Source Language:'), CfgPlTr.source),
+            getConfigListEntry(_('Destination Language:'), CfgPlTr.destination),
+            getConfigListEntry(_('Cache timeout hours (0 == while valid):'), CfgPlTr.timeout_hr),
+            getConfigListEntry(_('Show Source EPG:'), CfgPlTr.showsource)
+        ]
         ConfigListScreen.__init__(self, list, on_change=self.UpdateComponents)
-        self['actions'] = ActionMap(['OkCancelActions', 'ColorActions'], {'ok': self.save,
-         'cancel': self.cancel,
-         'red': self.cancel,
-         'green': self.save}, -1)
+        self['actions'] = ActionMap(['OkCancelActions', 'ColorActions'],
+             {'ok': self.save,
+              'cancel': self.cancel,
+              'red': self.cancel,
+              'green': self.save
+             },
+            -1)
+        self.setTitle("EPG Translator Setup - " + EPGTrans_vers)
         self.onLayoutFinish.append(self.UpdateComponents)
 
     def UpdateComponents(self):
-        png = '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + str(config.plugins.translator.destination.value) + '.png'
+        png = lang_flag(str(CfgPlTr.destination.value))
         if fileExists(png):
             self['flag'].instance.setPixmapFromFile(png)
-        current = self['config'].getCurrent()
+        AfCache.change_timeout(CfgPlTr.timeout_hr.value)
 
     def save(self):
         for x in self['config'].list:
             x[1].save()
-            configfile.save()
-
+        configfile.save()
         self.exit()
 
     def cancel(self):
         for x in self['config'].list:
             x[1].cancel()
-
         self.exit()
 
     def exit(self):
@@ -205,7 +346,14 @@ class translatorConfig(ConfigListScreen, Screen):
         return
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+
+# A string to use as a separator when the title and description are
+# combined for a one-call translation.
+# The idea is that it should be unchanged by the translation, but the
+# code does attempt to handle things even if it is changed.
 #
+sepline = "=========="
+
 class translatorMain(Screen):
 
 # Create the helptext as a class variable
@@ -216,13 +364,16 @@ class translatorMain(Screen):
     base_helptext = """
 Inside Plugin:
 Left <-> Right : <-> +- EPG Event
-Ok : translate Text
+Ok : enter text to translate
 Bouquet : +- Zap
 Menu : Setup
+Blue: Hide screen
+Yellow: Clear cache
+Red: Refresh EPG
 """
 
     def __init__(self, session, text):
-        self.showsource = config.plugins.translator.showsource.value
+        self.showsource = CfgPlTr.showsource.value
 
         if self.showsource == 'yes':    size = MySD.tMyes
         else:                           size = MySD.tMno
@@ -232,8 +383,6 @@ Menu : Setup
         self.session = session
         Screen.__init__(self, session)
 
-        self.source = str(config.plugins.translator.source.value)
-        self.destination = str(config.plugins.translator.destination.value)
         self.text = text
         self.hideflag = True
         self.refresh = False
@@ -241,49 +390,91 @@ Menu : Setup
         self.count = 0
         self.list = []
         self.eventName = ''
+
         self['flag'] = Pixmap()
         self['flag2'] = Pixmap()
+        self['timing'] = Label('')
         self['text'] = ScrollLabel('')
         self['text2'] = ScrollLabel('')
         self['label'] = Label('= Hide')
-# MovieSelectionActions are there so that Menu and Info keys work!(?)
-        self['actions'] = ActionMap(['OkCancelActions',
-         'DirectionActions',
-         'ChannelSelectBaseActions',
-         'ColorActions',
-         'MovieSelectionActions',
-         'HelpActions'], {'ok': self.ok,
-         'cancel': self.exit,
-         'right': self.rightDown,
-         'left': self.leftUp,
-         'down': self.down,
-         'up': self.up,
-         'nextBouquet': self.zapDown,
-         'prevBouquet': self.zapUp,
-         'red': self.getEPG,
-         'green': self.showHelp,
-         'blue': self.hideScreen,
-         'contextMenu': self.config,
-         'bluelong': self.showHelp,
-         'showEventInfo': self.showHelp}, -1)
-        self.onLayoutFinish.append(self.onLayoutFinished)
+        self['label2'] = Label('= Clear cache')
 
 # Add the English (base) helptext if it is not there.
 # This ensures it gets added with the same newline spacing as any other
 # language
         if 'en' not in self.helptext:
-            self.helptext['en'] = self.get_translation(self.base_helptext, from_lg='en', to_lg='en')
+            self.helptext['en'] = self.get_translation(self.base_helptext,
+                 from_lg='en', to_lg='en')
 
 # Add the helptext for the environment language and default destination
 # now
-        for lang in (language.getLanguage()[:2], self.destination):
+        env_lang_base = language.getLanguage().partition("_")[0]
+        for lang in (env_lang_base, CfgPlTr.destination.value):
             if lang not in self.helptext:
                 self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
 
-    def onLayoutFinished(self):
+        AMbindings = {
+         'ok': self.get_text,
+         'cancel': self.exit,
+         'down': self.down,
+         'up': self.up,
+         'yellow': self.clear_cache,
+         'red': self.getEPG,
+         'green': self.showHelp,
+         'blue': self.hideScreen,
+         'contextMenu': self.config,
+         'bluelong': self.showHelp,
+         'showEventInfo': self.showHelp
+        }
+# We need to know whether we are playing a recording as, if so, we do
+# NOT want to activate the service-changing keys, nor programme text
+# changes.
+# We also don't need to set-up a ServiceEventTracker for a recording, as
+# the even can't occur.
+# The playback state is also needed for getEPG(), so save it.
+# Do NOT use:
+#   self.session.nav.getCurrentlyPlayingServiceOrGroup().isPlayback()
+# as the test as that isPlayback() is Vix-specific
+#
+        self.inPlayBack = "0:0:0:0:0:0:0:0:0" in self.My_Sref().toCompareString()
 
-        source = '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + self.source + '.png'
-        destination = '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + self.destination + '.png'
+# Add the channel name.
+        wintitle = 'EPG Translator'
+        try:
+            cur_serv = self.My_Sref().getServiceName()
+            wintitle += " - " + cur_serv
+        except:
+            pass
+        self.setTitle(wintitle)
+
+        if not self.inPlayBack: # We can add in service-change keys
+            AMbindings.update({
+             'right': self.rightDown,
+             'left': self.leftUp,
+             'nextBouquet': self.zapDown,
+             'prevBouquet': self.zapUp
+            })
+# Also add the event tracker for changing service for not-in-Playback
+# This means we can call getEPG() *after* the service changes, even
+# if there may be a user prompt related to timeshift.
+#
+            self.__event_tracker = ServiceEventTracker(screen=self,
+                  eventmap= {iPlayableService.evTunedIn: self.__serviceTuned})
+
+        self['actions'] = ActionMap(['OkCancelActions',
+             'DirectionActions',
+             'ChannelSelectBaseActions',
+             'ColorActions',
+             'MovieSelectionActions',
+             'HelpActions'],
+             AMbindings, -1)
+        self.onLayoutFinish.append(self.onLayoutFinished)
+
+# Set the current country flags as the screen displays
+#
+    def onLayoutFinished(self):
+        source = lang_flag(CfgPlTr.source.value)
+        destination = lang_flag(CfgPlTr.destination.value)
         if self.showsource == 'yes':
             if fileExists(source):
                 self['flag'].instance.setPixmapFromFile(source)
@@ -291,59 +482,63 @@ Menu : Setup
                 self['flag2'].instance.setPixmapFromFile(destination)
         elif fileExists(destination):
             self['flag'].instance.setPixmapFromFile(destination)
+# I think self.text is always None, but leave this here anyway.
         if self.text is None:   self.getEPG()
-        else:                   self.translateEPG(self.text)
+        else:                   self.translateEPG(self.text, '')
         return
 
-    def ok(self):
+# When the service changes, get the EPG for it.
+# And update the channel name.
+
+    def __serviceTuned(self):
+        wintitle = 'EPG Translator'
+        try:
+            cur_serv = self.My_Sref().getServiceName()
+            wintitle += " - " + cur_serv
+        except:
+            pass
+        self.setTitle(wintitle)
+        self.getEPG()
+
+# Get the ServiceRef for the current object
+# We do this in several places
+#
+    def My_Sref(self):
+        service = self.session.nav.getCurrentService()
+        info = service.info()
+        return eServiceReference(info.getInfoString(iServiceInformation.sServiceref))
+
+# Bound to OK key. Request text (via a VirtualKeyBoard) to translate.
+#
+    def get_text(self):
         self.session.openWithCallback(self.translateText, VirtualKeyBoard, title='Text Translator:', text='')
+
+# Clear the cache of all items
+#
+    def clear_cache(self):
+        AfCache.purge()
+        self.session.open(MessageBox, _('Cache cleared'), MessageBox.TYPE_INFO, close_on_any_key=True)
 
 # Routine to get the actual translation of the given text
 # We are allowed to force the source or destination language...
 #
     def get_translation(self, text, from_lg=None, to_lg=None):
-
-# We need to url-encode this text (so "quote" is a misnamed function).
-#
-        text = quote(text)
-        if len(text) > 2000:
-            text = text[0:2000]
         if from_lg != None: source = from_lg
-        else:               source = self.source
+        else:               source = CfgPlTr.source.value
         if to_lg != None:   dest = to_lg
-        else:               dest = self.destination
-# The /m url produces a smaller result to the "full" (/) page.
-# It also (more importantly) actually returns the translated text!
-#
-        url = 'https://translate.google.com/m?&sl=%s&tl=%s&q=%s' % (source, dest, text)
-        agents = {'User-Agent': dflt_UA}
-# We'll extract the result from the returned web-page
-# This is currently (07 Dec 2020) in a div with its last item making it
-# a result-container...
-#
-        before_trans = 'class="result-container">'
-        request = Request(url, headers=agents)
-        try:
-            output = urlopen(request, timeout=20).read()
-            data = output[output.find(before_trans) + len(before_trans):]
-# ...and we want everything up to the end of the div
-#
-            newtext = data.split('</div>')[0]
-            newtext = transHTMLEnts(newtext)
-        except URLError as e:
-            newtext = 'URL Error: ' + str(e.reason)
-        except HTTPError as e:
-            newtext = 'HTTP Error: ' + str(e.code)
-        except socket.error as e:
-            newtext = 'Socket Error: ' + str(e)
-        return newtext
+        else:               dest = CfgPlTr.destination.value
+        return DO_translation(text, source, dest)
+
+# For both translate* calls we strip() any text we are given (consistency)
 
 # Translate the text (entered via a VirtualKeyboard)
 # and display it
 #
     def translateText(self, text):
-        if text and text != '':
-            self.setTitle('Text Translator')
+        if not text or text == '':      # Don't translate nothing
+            return
+        text = text.strip()
+        self.setTitle('Text Translator')
         newtext = self.get_translation(text)
         if self.showsource == 'yes':
             self['text'].setText(text)
@@ -355,86 +550,222 @@ Menu : Setup
 # Translate the text of an EPG description
 # and display it
 #
-    def translateEPG(self, text):
-        if text and text != '':
-            self.setTitle('EPG Translator')
-            try:
-                begin = self.event.getBeginTimeString()
-                duration = '%d min' % (self.event.getDuration() / 60)
-            except:
-                begin = ''
-                duration = ''
-
-        newtext = self.get_translation(text)
-        newtext = re.sub('\n ', '\n', newtext)
-        if self.refresh == False:
-            newtext = begin + '\n\n' + newtext + '\n\n' + duration
-            newtext = re.sub('\n\n\n\n', '\n\n', newtext)
-        if self.showsource == 'yes':
-            if self.refresh == False:
-                self['text'].setText(begin + '\n\n' + text + '\n\n' + duration)
-            else:
-                self['text'].setText(text)
-            self['text2'].setText(newtext)
+    def translateEPG(self, title, descr, do_translate=True):
+        if title == None:
+            title = ''
         else:
-            self['text'].setText(newtext)
+            title = title.strip()
+        if descr == None:
+            descr = ''
+        else:
+            descr = descr.strip()
+        if (title == '') and (descr == ''): # Don't display nothing
+            return
+
+# We don't set epg_B for a recording, so this will drop to the exception
+# Also, add begin/duration spacing newlines here, so there are none
+# if we hit the exception.
+#
+        try:
+            begin=time.strftime("%Y-%m-%d %H:%M", time.localtime(int(self.event[epg_B])))
+        except:
+            begin = ''
+        if self.event[epg_D] > 0:
+            plen = (int(self.event[epg_D]) / 60)    # mins
+            if plen >= 60:
+                hr = int(plen/60)
+                plen -= 60*hr
+                duration = "%dh %dm" % (hr, plen)
+            else:
+                duration = "%dm" % (plen)
+        else:
+            duration = ''
+        if do_translate:
+# Check whether we already have the translation.
+#
+# If we are playing back a recording we'll have set epg_I to its path file_info
+# and epg_N to the title, or "PLAYBACK"
+#
+                uref = make_uref(self.event[epg_I], self.event[epg_N])
+                (t_title, t_descr) = AfCache.fetch(uref)
+                if t_descr == None:   # Not there...
+# We need to translate the description.
+# Some descriptions (e.g. UK Freeview) can contain "properties" in [] at
+# the end.  And so [S,AD] (subtitles, audio-description) end up being
+# translated (e.g. for en -> de [S,AD] -> [TRAURIG]).
+# So strip any such trailers before sending for translation then append
+# them to the result.
+#
+                    (desc, prop, prepend_props) = split_off_props(descr)
+
+# We wish to translate the title and description in one call
+# So we:
+#   send sepline\n+title+\nsepline\n+desc
+#   take the first line of what comes back
+#   split the rest into two based on that first line
+#
+                    r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
+                    t_text = self.get_translation(r_text)
+                    try:
+                        (t_sep, t_rest) = t_text.split("\n", 1)
+                        (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
+                        if prop != "":
+# prop will contain the "correct" trailing/whitespace
+# But ignore them for an rtol language, as it will mess them up (may
+# be messed up anyway, but no need to ensure it).
+#
+                            if CfgPlTr.destination.value not in rtol:
+                                if prepend_props:
+                                    t_descr = prop + t_descr
+                                else:
+                                    t_descr = t_descr + prop
+
+# Work out a timeout for the result.
+# If we have a specific timeout (in hours) use it, but if this is 0 set
+# the timeout to when the programme will leave the EPG.
+# But even a specific timeout should not extend beyond programme
+# validity.
+# Also handle a recording playback, which will have neither begin nor duration.
+#
+                        if self.event[epg_B] == None:   # A recording
+                            to = int(time.time() + 10800)
+                        else:
+                            to = int(self.event[epg_B] + self.event[epg_D] + 60*config.epg.histminutes.value)
+                        if CfgPlTr.timeout_hr.value > 0:
+                            limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
+                            if limit < to:  to = limit
+                        AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
+                    except Exception as e:  # Use originals on a failure...
+                        print("[EPGTranslator-Plugin] translateEPG error:", e)
+                        (t_title, t_descr) = (title, descr)
+# We now have the title+descr and t_title+t_descr to display
+# None of the fields should have trailing newlines, so we should know
+# where we are.
+#
+# begin + duration is always shown untranslated in its own field
+#
+        self['timing'].setText(begin + " - " + duration)
+        tr_text = t_title + "\n\n" + t_descr
+        if self.showsource == 'yes':
+            or_text = title + "\n\n" + descr
+            self['text'].setText(or_text)
+            self['text2'].setText(tr_text)
+        else:
+            self['text'].setText(tr_text)
             self['text2'].hide()
 
+# Populate the EPG data in self.list from the box's internal EPG cache
+#
     def getEPG(self):
         self.max = 1
-        self.count = 0
+        self.count = 0      # Starting point in list
         self.list = []
-        self.epgcache = eEPGCache.getInstance()
-        ref = self.session.nav.getCurrentlyPlayingServiceReference()
-        service = self.session.nav.getCurrentService()
-        info = service.info()
-        curEvent = info.getEvent(0)
-        if curEvent:
-            self.list.append(curEvent)
-            self.epgcache.startTimeQuery(eServiceReference(ref.toString()), curEvent.getBeginTime() + curEvent.getDuration())
-            i = 1
-            while i <= int(config.plugins.translator.maxevents.value):
-                event = self.epgcache.getNextTimeEntry()
-                if event is not None:
-                    self.list.append(event)
-                i += 1
 
+# If we are in playback then there is no EPG cache related to it
+# So just fudge in a single entry for it - we've already disabled
+# channel-changing keys for this case
+#
+        if self.inPlayBack:
+            ssn = self.session.nav
+            path = ssn.getCurrentlyPlayingServiceOrGroup().getPath()
+            finfo = os.stat(path)
+            file_id = str(finfo.st_dev) + ":" + str(finfo.st_ino)
+# Now head towards the event...
+            service = ssn.getCurrentService()
+            info = service.info()
+            curEvent = info.getEvent(0)     # 0 == NOW, 1 == NEXT
+# A downloaded file (from iPlayer - any mp4?) appears to have no
+# curEvent, so cater for this.
+# Set some default fields in case we fail for any reason...
+#
+            short = ""
+            extended = "Description unavailable"
+            ename = "Unknown title"
+            Servname = "PLAYBACK"
+            dur = 0
+            try:
+                if curEvent:
+                    short = curEvent.getShortDescription()
+                    extended = curEvent.getExtendedDescription()
+                    ename = curEvent.getEventName()
+                    Servname = ename
+                    dur = curEvent.getDuration()
+                else:
+                    ename = self.My_Sref().getServiceName()
+                    Servname = ename
+            except:
+                pass
+
+# Create a list of the correct size with all elements None
+#
+            pbinfo = [None]*(len(EPG_OPTIONS)-1)    # Ignoring X
+            pbinfo[epg_I] = file_id
+            pbinfo[epg_S] = short
+            pbinfo[epg_E] = extended
+            pbinfo[epg_T] = ename
+            pbinfo[epg_N] = Servname
+            pbinfo[epg_D] = dur
+            self.list = [tuple(pbinfo)]
+        else:
+# We'll get the same EPG (for the current channel) as would be displayed
+# So we start at config.epg.histminutes before now.
+# We'll remember everything returned by lookupEvent()
+#
+            t_now = int(time.time())
+            epg_base = t_now - 60*int(config.epg.histminutes.value)
+            epg_extent = 86400*14   # Get up to 14 days from now
+            test = [ EPG_OPTIONS, (self.My_Sref().toCompareString(), 0, epg_base, epg_extent) ]
+            epgcache = eEPGCache.getInstance()
+            self.list = epgcache.lookupEvent(test)
             self.max = len(self.list)
+# Update the starting point to the currently running service, which will be
+# the last one before one with a future starting time
+#
+            for i in list(range(1,len(self.list))):
+                if self.list[i][epg_B] > t_now: break
+                self.count = i
+# Get the display going...
         self.showEPG()
         return
 
+# Get the text and translate it for display
+#
     def showEPG(self):
         try:
             self.event = self.list[self.count]
-            self.eventName = self.event.getEventName()
-            text = self.eventName
-            short = self.event.getShortDescription()
-            ext = self.event.getExtendedDescription()
+            title=self.event[epg_T]
+            short=self.event[epg_S]
+            extended=self.event[epg_E]
             self.refresh = False
         except:
-            text = 'Press red button to refresh EPG'
+            title = 'Press red button to refresh EPG'
             short = ''
-            ext = ''
+            extended = ''
             self.refresh = True
 
-        if short and short != text:
-            text += '\n\n' + short
-        if ext:
-            if text:
-                text += '\n\n'
-            text += ext
-        self.translateEPG(str(text))
+# This MUST match the code in EventViewBase.setEvent() to get extended
+# That way we can use the same cache for both...
+#
+        if short == title:
+            short = ""
+        if short and extended:
+            extended = short + '\n' + extended
+        elif short:
+            extended = short
+        self.translateEPG(title, extended)
 
     def leftUp(self):
         self.count -= 1
+# Don't wrap....
         if self.count == -1:
-            self.count = self.max - 1
+            self.count = 0
         self.showEPG()
 
     def rightDown(self):
         self.count += 1
+# Don't wrap....
         if self.count == self.max:
-            self.count = 0
+            self.count = self.max - 1
         self.showEPG()
 
     def up(self):
@@ -448,26 +779,24 @@ Menu : Setup
     def zapUp(self):
         if InfoBar and InfoBar.instance:
             InfoBar.zapUp(InfoBar.instance)
-            self.getEPG()
 
     def zapDown(self):
         if InfoBar and InfoBar.instance:
             InfoBar.zapDown(InfoBar.instance)
-            self.getEPG()
 
     def showHelp(self):
 # Display the help in the current environment and destination language
-# (but only once if these are the same text)
+# (but only show once if these are the same text)
 # Use our translation code to get this from the English
 #
         env_lang = language.getLanguage()[:2]
-        for lang in (env_lang, self.destination):
+        for lang in (env_lang, CfgPlTr.destination.value):
             if lang not in self.helptext:
                 self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
         text = "EPG Translator version: " + EPGTrans_vers
         text += "\n\n" + self.helptext[env_lang]
-        if self.helptext[env_lang] != self.helptext[self.destination]:
-            text += "\n\n" + self.helptext[self.destination]
+        if self.helptext[env_lang] != self.helptext[CfgPlTr.destination.value]:
+            text += "\n\n" + self.helptext[CfgPlTr.destination.value]
         self.session.open(MessageBox, text, MessageBox.TYPE_INFO, close_on_any_key=True)
 
     def config(self):
@@ -491,63 +820,209 @@ Menu : Setup
         self.close()
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+# Code to link into EventView windows to allow them to be translated by
+# pressing the Text key.
 #
+
+##################################################################
+# The original values of functions we intercept
+#
+orig_EVB__init__ = None
+orig_EVB_setEvent = None
+
+##################################################################
+# Code to toggle whether we are translating.
+# Bound to Text in any EventView screen.
+#
+def EPGTr_ToggleMode(self):
+    self.EPGTr_translating = not self.EPGTr_translating
+
+# We need to update the event text - its translation state has changed.
+# So we set the event to the current event.
+# So we call setEvent(), which should now My_setEvent() but we still
+# call setEvent() in case some other plugin has intercepted the call as
+# well.
+#
+    self.setEvent(self.event)
+
+##################################################################
+# The code to handle the text that will be displayed.
+# This is an extension to the EventViewbase.setEvent().
+#
+def My_setEvent(self, event):
+    global orig_EVB_setEvent
+
+# First, call the original code
+#
+    orig_EVB_setEvent(self, event)
+
+# If we aren't translating then we have nothing more to do...
+#
+    if not self.EPGTr_translating: return
+
+# ... but if we are translating we need to change the text which
+# the orig_EVB_setEvent() call above has set.
+# As long as there is an event...
+#
+    if event is None or not hasattr(event, 'getEventName'):
+        return
+
+# Do we already have the translation for this lang/eventID/Service?
+# If so, just use what we already have.
+# NOTE that a playback of a programme with no Info (e.g. an Iplayer
+# download) won't get here (since no EventView window appears).
+# A playback of a recording will, and has valid getEventId() and
+# getServiceName() results.
+#
+    uref = make_uref(event.getEventId(), self.currentService.getServiceName())
+    (t_title, t_descr) = AfCache.fetch(uref)
+    if t_descr == None: # Not there...work out what it should be
+        try:            # Duck out having set nothing on an error...
+
+# You may need to lookup in EventBase.setEvent to see how these fields
+# are used and so how you can get the text to translate.
+# On all distros (ATV PLi Vix eight):
+#   o The current descr will have been put into the self["FullDescription"]
+#     ScrollLabel object in all distros.
+#   o The current title will have been set as the Title
+#
+# So get them from there and translate them
+# Where the translations actually needs to be installed is
+# version-dependent - see the end of this function.
+#
+            title = self.getTitle().strip()
+            descr = self["FullDescription"].getText().strip()
+            (desc, prop, prepend_props) = split_off_props(descr)
+
+# We wish to translate the title and description in one call
+# So we:
+#   send sepline+title+sepline+desc
+#   take the first line of what comes back
+#   split the rest into two based on that first line
+#
+            r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
+            t_text = DO_translation(r_text,
+                 str(CfgPlTr.source.value),
+                 str(CfgPlTr.destination.value)
+                )
+            (t_sep, t_rest) = t_text.split("\n", 1)
+            (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
+            if prop != "":
+# prop will contain the "correct" trailing/whitespace
+                if prepend_props:
+                    t_descr = prop + t_descr
+                else:
+                    t_descr = t_descr + prop
+
+# ...and add that to the cache
+#
+# If we have a specific timeout (in hours) use it, but if this is 0 set
+# the timeout to when the programme will leave the EPG
+# But even a specific timeout should not extend beyond programme
+# validity.
+#
+            to = int(event.getBeginTime() + event.getDuration() + 60*config.epg.histminutes.value)
+            if CfgPlTr.timeout_hr.value > 0:
+                limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
+                if limit < to:  to = limit
+            AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
+        except Exception as e:
+            print("[EPGTranslator-Plugin] My_setEvent error:", e)
+            return      # Do nothing on any failure
+
+# We have a set of translations now.
+# Different skins use different fields for these data, so
+# populate both for each.
+#
+# What needs to be set is distro-dependent
+#
+#    self["what"]            set to              distro
+#   epg_description         title + extended    All
+#   epg_eventname           title               Vix, PLi
+#   summary_description     extended            Vix
+#   FullDescription         extended            All
+#   setTitle()              title               All
+#
+    if "epg_description" in self:
+        self["epg_description"].setText(t_title + "\n\n" + t_descr)
+    if "epg_eventname" in self:
+        self["epg_eventname"].setText(t_title)
+    if "summary_description" in self:
+        self["summary_description"].setText(t_descr)
+    if "FullDescription" in self:
+        self["FullDescription"].setText(t_descr)
+    self.setTitle(t_title)
+
+##################################################################
+# Intercepting code for EventViewBase __init__()
+# We add an ActionMap for text key binding.
+#
+def My_EVB__init__(self, *args, **kwargs):
+    global orig_EVB__init__
+
+# First, call the original code
+#
+    orig_EVB__init__(self, *args, **kwargs)
+
+# Add the bits to get a Text key handler for EventViewBase
+# We create our own ActionMap. The VirtualKeyboardActions contexts only
+# defines a Text key (convenient!) and calls it "showVirtualKeyboard".
+#
+    which= "EPGTrans"
+    self[which] = ActionMap(["VirtualKeyboardActions"],
+           {"showVirtualKeyboard": self.EPGTr_ToggleMode})
+    self[which].setEnabled(True)
+
+# Start each EventView in non-translating mode
+#
+    self.EPGTr_translating = False
+
+##################################################################
+# Start-up links (see PluginDescriptor defs)
+# This gets the current setting of functions we intercept
+# (EventViewBase.__init__ EventViewBase.setEvent)
+# and saves them (so they may be called by our interceptor) and replaces
+# them with my "added-handler".
+# We also add our additional handlers to EventViewBase
+#
+autostart_init_done = False
 def autostart(reason, **kwargs):
-    global newEventViewBase__init__
-    global newEPGSelection__init__
-    newEventViewBase__init__ = EventViewBase.__init__
-    EventViewBase.__init__ = EventViewBase__init__
-    EventViewBase.translateEPG = translateEPG
-    newEPGSelection__init__ = EPGSelection.__init__
-    try:
-        check = EPGSelection.setPiPService
-        EPGSelection.__init__ = EPGSelectionVTi__init__
-    except AttributeError:
-        try:
-            check = EPGSelection.togglePIG
-            EPGSelection.__init__ = EPGSelectionATV__init__
-        except AttributeError:
-            try:
-                check = EPGSelection.runPlugin
-                EPGSelection.__init__ = EPGSelectionPLI__init__
-            except AttributeError:
-                EPGSelection.__init__ = EPGSelection__init__
+    global orig_EVB__init__, orig_EVB_setEvent
+    global autostart_init_done      # Otherwise we create a local one
 
-def EventViewBase__init__(self, Event, Ref, callback = None, similarEPGCB = None):
-    newEventViewBase__init__(self, Event, Ref, callback, similarEPGCB)
+# We only want to do this when starting (reason == 0)
+# AND we only want to do it once (although we will probably only get
+# called once with reason 0).
 
-def EPGSelection__init__(self, session, service, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None):
-    newEPGSelection__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB)
+    if reason != 0: return
+    if autostart_init_done: return
 
-def EPGSelectionVTi__init__(self, session, service, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, isEPGBar = None, switchBouquet = None, EPGNumberZap = None, togglePiP = None):
-    newEPGSelection__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, isEPGBar, switchBouquet, EPGNumberZap, togglePiP)
+# Note that we will have done it.
+#
+    autostart_init_done = True
 
-def EPGSelectionATV__init__(self, session, service = None, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, EPGtype = None, StartBouquet = None, StartRef = None, bouquets = None):
-    newEPGSelection__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, EPGtype, StartBouquet, StartRef, bouquets)
+# Intercepted for additional code
+#
+    orig_EVB__init__ = EventViewBase.__init__
+    EventViewBase.__init__ = My_EVB__init__
+    orig_EVB_setEvent = EventViewBase.setEvent
+    EventViewBase.setEvent = My_setEvent
 
-def EPGSelectionPLI__init__(self, session, service = None, zapFunc = None, eventid = None, bouquetChangeCB = None, serviceChangeCB = None, parent = None):
-    newEPGSelection__init__(self, session, service, zapFunc, eventid, bouquetChangeCB, serviceChangeCB, parent)
-
-def translateEPG(self):
-    if self.event:
-        text = self.event.getEventName()
-        short = self.event.getShortDescription()
-        ext = self.event.getExtendedDescription()
-        if short and short != text:
-            text += '\n\n' + short
-        if ext:
-            if text:
-                text += '\n\n'
-            text += ext
-        self.session.open(translatorMain, text)
+# Added methods
+#
+    EventViewBase.EPGTr_ToggleMode = EPGTr_ToggleMode
 
 
+# Where the Plugin starts when invoked via Plugins
+#
 def main(session, **kwargs):
     session.open(translatorMain, None)
     return
 
-
 def Plugins(**kwargs):
-    return [PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_PLUGINMENU], icon='plugin.png', fnc=main),
+    return [
+     PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_PLUGINMENU], icon='plugin.png', fnc=main),
      PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_EXTENSIONSMENU], fnc=main),
-     PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_EVENTINFO], fnc=main)]
+     PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_EVENTINFO], fnc=main),
+     PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_AUTOSTART], fnc=autostart)
+    ]
