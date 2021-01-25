@@ -3,7 +3,7 @@
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.01-rc9"
+EPGTrans_vers = "2.01-release"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry

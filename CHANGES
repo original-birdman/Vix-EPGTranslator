@@ -241,5 +241,10 @@ control
 
 ========== 2.01-release
 
-    Push to master thread
+    Push to master thread from Dev
+
+    Om master
+plugin.py
+    Updated version tag to 2.01-release
+    Built ipk
     Added the 2.01-release tag to git
