@@ -200,7 +200,7 @@ def PART_translate(enc_text, source, dest):
 # Don't bother to distinguish error...
 #
     except:
-        newtext = ''    # leaving failed as true
+        newtext = ''    # leaving failed as True
     return (failed, newtext)
 
 # We need to split on ".<whitespace>" and "<whitespace>", whilst
@@ -236,7 +236,6 @@ def DO_translation(text, source, dest):     # source, dest are langs
     max = 7000              # Less than the actual ~7638
     nsplit = int(enc_len/max) + 1
     bsize = int(enc_len/nsplit) - 10
-
 
 # We need to step along the string finding the longest match within the
 # limits that ends a sentence.  Or, if we can't find a sentence end, at
@@ -278,7 +277,7 @@ def DO_translation(text, source, dest):     # source, dest are langs
 #
         (failed, this_part) = PART_translate(this_encpart, source, dest)
         if failed:
-            res += "...unable to translate"
+            res += "...unable to translate\n"   # \n for splitting...
             break
 
 # Append the translated sub-text and the discovered separator
@@ -703,7 +702,7 @@ Red: Refresh EPG
                                     t_descr = prop + t_descr
                                 else:
                                     t_descr = t_descr + prop
-
+    
 # Work out a timeout for the result.
 # If we have a specific timeout (in hours) use it, but if this is 0 set
 # the timeout to when the programme will leave the EPG.
@@ -722,6 +721,7 @@ Red: Refresh EPG
                     except Exception as e:  # Use originals on a failure...
                         print("[EPGTranslator-Plugin] translateEPG error:", e)
                         (t_title, t_descr) = (title, descr)
+
 # We now have the title+descr and t_title+t_descr to display
 # None of the fields should have trailing newlines, so we should know
 # where we are.
@@ -993,10 +993,14 @@ def My_setEvent(self, event):
             (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
             if prop != "":
 # prop will contain the "correct" trailing/whitespace
-                if prepend_props:
-                    t_descr = prop + t_descr
-                else:
-                    t_descr = t_descr + prop
+# But ignore them for an rtol language, as it will mess them up (may
+# be messed up anyway, but no need to ensure it).
+#
+                if CfgPlTr.destination.value not in rtol:
+                    if prepend_props:
+                        t_descr = prop + t_descr
+                    else:
+                        t_descr = t_descr + prop
 
 # ...and add that to the cache
 #
