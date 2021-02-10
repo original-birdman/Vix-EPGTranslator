@@ -241,5 +241,21 @@ control
 
 ========== 2.01-release
 
-    Push to master thread
+    Push to master thread from Dev
+
+    Om master
+plugin.py
+    Updated version tag to 2.01-release
+    Built ipk
     Added the 2.01-release tag to git
+
+========== 2.02-rc1 STARTS [10 Feb 2021]
+
+plugin.py
+    Implemented a loop over Google translate calls using the
+    PART_translate() function to overcome any ~7500 character limit.
+    DO_translation() now unzips for call to this then stitches things
+    back up, as required.
+    No longer distinguish URLError, HTTPError and socket errors. An
+    error is now just a failure to translate.
+    Updated version tag to 2.02-rc1

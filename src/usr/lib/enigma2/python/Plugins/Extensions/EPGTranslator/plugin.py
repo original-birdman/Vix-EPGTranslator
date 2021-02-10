@@ -3,7 +3,7 @@
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.01-rc9"
+EPGTrans_vers = "2.02-rc1"
 
 from Components.ActionMap import ActionMap
 from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
@@ -23,7 +23,7 @@ from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Tools.Directories import fileExists
 
-import socket, sys, re, time, os
+import sys, re, time, os
 
 from .AutoflushCache import AutoflushCache
 from .HTML5Entities import name2codepoint
@@ -32,15 +32,14 @@ from .HTML5Entities import name2codepoint
 #
 if sys.version_info[0] == 2:
 # Python2 version
-    from urllib import quote
-    from urllib2 import Request, urlopen, URLError, HTTPError
+    from urllib import quote, unquote
+    from urllib2 import Request, urlopen
     def dec2utf8(n):         return unichr(n).encode('utf-8')
 
 else:
 # Python3 version
-    from urllib.parse import quote
+    from urllib.parse import quote, unquote
     from urllib.request import Request, urlopen
-    from urllib.error import URLError, HTTPError
 # No unichr in Py3. chr() returns a unicode string.
 #
     def dec2utf8(n):         return chr(n)
@@ -167,26 +166,17 @@ def transHTMLEnts(text):
     text = re.sub("&.{,30}?;", repl, text)
     return str(text)
 
-# The routine to actually translate the text.
-# This is NOT an object method, so that it can be called from "anywhere"
-# This routine expects to get normal ("raw") text and will return the
-# same.
-# So *it* knows about URL encoding and HTMLEntity translation, so that
-# the callers do not need to.
+# A function to make a call to Google translate
+# It may be dealing with only a sub-text of the original as
+# DO_translation() will be splitting and long text and making
+# multiple calls here.
 #
-def DO_translation(text, source, dest):     # source, dest are langs
-
-    text = quote(text)  # url-encode the text ("quote" is a misnomer)
-# The actual limit for this is 7656~7707
-# Could add code to split the query (on a suitable boundary, into
-# similar request sizes) beyond that.
-#
-    if len(text) > 7000: text = text[0:7000]    # Need limit for uri
+def PART_translate(enc_text, source, dest):
 
 # The /m url produces a smaller result to the "full" (/) page.
-# It also (more importantly) actually returns the translated text!
+# It also (more importantly) actually returns the translated enc_text!
 #
-    url = 'https://translate.google.com/m?&sl=%s&tl=%s&q=%s' % (source, dest, text)
+    url = 'https://translate.google.com/m?&sl=%s&tl=%s&q=%s' % (source, dest, enc_text)
     agents = {'User-Agent': dflt_UA}
 
 # We'll extract the result from the returned web-page
@@ -196,6 +186,7 @@ def DO_translation(text, source, dest):     # source, dest are langs
 #
     before_trans = 'class="result-container">'
     end_trans = '</div>'
+    failed = True
     request = Request(url, headers=agents)
     try:
 # Ensure the result is marked as utf-8 (Py2 needs it, Py3 doesn't, but
@@ -205,13 +196,106 @@ def DO_translation(text, source, dest):     # source, dest are langs
         data = output[output.find(before_trans) + len(before_trans):]
         newtext = data.split(end_trans)[0]
         newtext = transHTMLEnts(newtext)
-    except URLError as e:
-        newtext = 'URL Error: ' + str(e.reason)
-    except HTTPError as e:
-        newtext = 'HTTP Error: ' + str(e.code)
-    except socket.error as e:
-        newtext = 'Socket Error: ' + str(e)
-    return newtext
+        failed = False
+# Don't bother to distinguish error...
+#
+    except:
+        newtext = ''    # leaving failed as true
+    return (failed, newtext)
+
+# We need to split on ".<whitespace>" and "<whitespace>", whilst
+# remembering what the actual splitter was.
+# So create the text patterns once.
+#
+enc_wspace = ''
+enc_space = ''
+nenc_sep = ''
+for c in ([" ", "\n", "\t"]):   # Actually .<ws>
+    enc_wspace = enc_wspace + nenc_sep + '\.' + quote(c)
+    enc_space = enc_space + nenc_sep + quote(c)
+    nenc_sep = '|'
+
+# The routine to actually sort out the translate of the text.
+# This is NOT an object method, so that it can be called from "anywhere"
+# This routine expects to get normal ("raw") text and will return the
+# same.
+# So *it* knows about URL encoding and HTMLEntity translation, so that
+# the callers do not need to.
+# It will split the incoming text (if necessary) into sub-texts of a
+# length that Google translate can handle, then stitch them back
+# together.
+# The code tries to do such splitting at sentence boundaries (.<ws>) or
+# failing that, at a word boundary (ws). If it can't do that it's
+# en error.
+#
+def DO_translation(text, source, dest):     # source, dest are langs
+    global enc_wspace, enc_space
+
+    enc_text = quote(text)
+    enc_len = len(enc_text)
+    max = 7000              # Less than the actual ~7638
+    nsplit = int(enc_len/max) + 1
+    bsize = int(enc_len/nsplit) - 10
+
+
+# We need to step along the string finding the longest match within the
+# limits that ends a sentence.  Or, if we can't find a sentence end, at
+# the end of a word.
+#
+    si = 0
+    ei = len(enc_text) - 1
+    togo = ei
+    check_end = True
+    res = ''
+
+    while True:
+# The running endpos is the lesser of si+bsize and ei
+#
+        ri = ei
+        if ri > (si + bsize):
+            ri = si + bsize
+
+        if togo <= max:
+            this_encpart = enc_text[si:]
+            this_sep = ''
+            this_len = len(this_encpart)
+        else:
+            split_re1 = "(?:(.{1,%s})(%s))" % (bsize, enc_wspace)
+            split_re1 = re.compile(split_re1)
+            match = split_re1.search(enc_text, si, ri)
+            if match == None:
+                split_re2 = "(?:(.{1,%s})(%s))" % (bsize, enc_space)
+                split_re2 = re.compile(split_re2)
+                match = split_re2.search(enc_text, si, ri)
+            if match == None:
+                res += "...unable to translate"
+                break
+            this_encpart = match.group(1)
+            this_sep = unquote(match.group(2))
+            this_len = len(this_encpart) + len(match.group(2))
+
+# Translate the sub-text
+#
+        (failed, this_part) = PART_translate(this_encpart, source, dest)
+        if failed:
+            res += "...unable to translate"
+            break
+
+# Append the translated sub-text and the discovered separator
+#
+        res += unquote(this_part) + this_sep
+        si += this_len
+        togo -= this_len
+        if togo <= 0:   break
+
+# Iff the remaining quoted length is less than twice bsize then lower
+# bsize, so we can't(?) end up with a very small final part.
+#
+        if check_end and (togo < bsize*2):
+            bsize = int(bsize*2.0/3.0)
+            check_end = False
+
+    return res.strip()
 
 # Create a reference key for the cache.
 # Done in one place to ensure consistency.
@@ -240,8 +324,8 @@ def lang_flag(lang):    # Where the language images are
 #
 # Also the compiled expression for the patterns.
 #
-# Patterns for matchin [...] and (...)
-# Interpolated into the workign patterns using %s (so look out for them)
+# Patterns for matching [...] and (...)
+# Interpolated into the working patterns using %s (so look out for them)
 #
 skb_prop = '\[[^\]]*\]'
 par_prop = '\([^\)]*\)'
