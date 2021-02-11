@@ -277,12 +277,12 @@ def DO_translation(text, source, dest):     # source, dest are langs
 #
         (failed, this_part) = PART_translate(this_encpart, source, dest)
         if failed:
-            res += "...unable to translate\n"   # \n for splitting...
+            res += "...unable to translate"
             break
 
 # Append the translated sub-text and the discovered separator
 #
-        res += unquote(this_part) + this_sep
+        res += this_part + this_sep
         si += this_len
         togo -= this_len
         if togo <= 0:   break
@@ -669,9 +669,9 @@ Red: Refresh EPG
 # If we are playing back a recording we'll have set epg_I to its path file_info
 # and epg_N to the title, or "PLAYBACK"
 #
-                uref = make_uref(self.event[epg_I], self.event[epg_N])
-                (t_title, t_descr) = AfCache.fetch(uref)
-                if t_descr == None:   # Not there...
+            uref = make_uref(self.event[epg_I], self.event[epg_N])
+            (t_title, t_descr) = AfCache.fetch(uref)
+            if t_descr == None:   # Not there...
 # We need to translate the description.
 # Some descriptions (e.g. UK Freeview) can contain "properties" in [] at
 # the end.  And so [S,AD] (subtitles, audio-description) end up being
@@ -679,7 +679,7 @@ Red: Refresh EPG
 # So strip any such trailers before sending for translation then append
 # them to the result.
 #
-                    (desc, prop, prepend_props) = split_off_props(descr)
+                (desc, prop, prepend_props) = split_off_props(descr)
 
 # We wish to translate the title and description in one call
 # So we:
@@ -687,14 +687,21 @@ Red: Refresh EPG
 #   take the first line of what comes back
 #   split the rest into two based on that first line
 #
-                    r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
-                    t_text = self.get_translation(r_text)
+                r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
+                t_text = self.get_translation(r_text)
+
+# If this doesn't come back starting with sepline, we have an error
+#
+                if t_text[:len(sepline)] != sepline:
+                    t_title = "Translation error"
+                    t_descr = t_text
+                else:
                     try:
                         (t_sep, t_rest) = t_text.split("\n", 1)
                         (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
                         if prop != "":
 # prop will contain the "correct" trailing/whitespace
-# But ignore them for an rtol language, as it will mess them up (may
+# But ignore props for an rtol language, as it will mess them up (may
 # be messed up anyway, but no need to ensure it).
 #
                             if CfgPlTr.destination.value not in rtol:
@@ -702,7 +709,7 @@ Red: Refresh EPG
                                     t_descr = prop + t_descr
                                 else:
                                     t_descr = t_descr + prop
-    
+
 # Work out a timeout for the result.
 # If we have a specific timeout (in hours) use it, but if this is 0 set
 # the timeout to when the programme will leave the EPG.

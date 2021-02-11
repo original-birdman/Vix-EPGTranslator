@@ -263,3 +263,8 @@ plugin.py
 plugin.py
     Add code to ignore props with rtol text to My_setEvent() lookups as
     well.
+
+plugin.py
+    Don't unquote() the translated text - it isn't quote()d.
+    If an EPG translation doesn't start with sepline there has been a
+    problem, so handle it accordingly.
