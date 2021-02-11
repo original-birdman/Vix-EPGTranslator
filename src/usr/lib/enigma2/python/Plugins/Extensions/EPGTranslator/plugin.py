@@ -146,6 +146,12 @@ def applySkinVars(skin, dict):
             print(e, '@key=', key)
     return skin
 
+# We need to know where we are to find the files relative to theis
+# script. Can't do this until we've defined a piece of code/object.
+#
+import inspect, os.path
+plugin_location = os.path.dirname(inspect.getsourcefile(applySkinVars))
+
 # Translate HTML Entities (&xxx;) in text
 # The standard python name2codepoint (in htmlentitydefs for Py2,
 # html.entities for Py3) is incomplete, so we'll use a complete
@@ -308,7 +314,8 @@ def make_uref(sv_id, sv_name, lang=None):
     return ":".join([lang, str(sv_id), str(sv_name)])
 
 def lang_flag(lang):    # Where the language images are
-    return '/usr/lib/enigma2/python/Plugins/Extensions/EPGTranslator/pic/flag/' + lang  + '.png'
+    global plugin_location
+    return plugin_location + '/pic/flag/' + lang  + '.png'
 
 # Regular expressions to split off the [] or () properties from a
 # description. Used from two different classes.
@@ -387,7 +394,10 @@ def split_off_props(descr):
 class translatorConfig(ConfigListScreen, Screen):
 
     def __init__(self, session):
-        self.skin = MySD.translatorConfig_skin
+        global plugin_location
+
+        self.dict = {'plug_loc': plugin_location}
+        self.skin = applySkinVars(MySD.translatorConfig_skin, self.dict)
         Screen.__init__(self, session)
         self['flag'] = Pixmap()
         list = [
@@ -456,12 +466,13 @@ Red: Refresh EPG
 """
 
     def __init__(self, session, text):
-        self.showsource = CfgPlTr.showsource.value
+        global plugin_location
 
+        self.showsource = CfgPlTr.showsource.value
         if self.showsource == 'yes':    size = MySD.tMyes
         else:                           size = MySD.tMno
 
-        self.dict = {'size': size}
+        self.dict = {'size': size, 'plug_loc': plugin_location}
         self.skin = applySkinVars(MySD.translatorMain_skin, self.dict)
         self.session = session
         Screen.__init__(self, session)

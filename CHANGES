@@ -268,3 +268,9 @@ plugin.py
     Don't unquote() the translated text - it isn't quote()d.
     If an EPG translation doesn't start with sepline there has been a
     problem, so handle it accordingly.
+
+Skin_medium.py
+Skin_small.py
+plugin.py
+    Make icon locations relative to the script, rather than hardwiring
+    full pathnames.
