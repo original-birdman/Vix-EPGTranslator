@@ -677,8 +677,8 @@ Red: Refresh EPG
         if do_translate:
 # Check whether we already have the translation.
 #
-# If we are playing back a recording we'll have set epg_I to its path file_info
-# and epg_N to the title, or "PLAYBACK"
+# If we are playing back a recording we'll have set epg_I to its path
+# file_info and epg_N to the title, or "Recording"
 #
             uref = make_uref(self.event[epg_I], self.event[epg_N])
             (t_title, t_descr) = AfCache.fetch(uref)
@@ -783,8 +783,9 @@ Red: Refresh EPG
             short = ""
             extended = "Description unavailable"
             ename = "Unknown title"
-            Servname = "PLAYBACK"
+            Servname = "Recording"
             dur = 0
+            begin = None
             try:
                 if curEvent:
                     short = curEvent.getShortDescription()
@@ -792,6 +793,12 @@ Red: Refresh EPG
                     ename = curEvent.getEventName()
                     Servname = ename
                     dur = curEvent.getDuration()
+                    seek = service.seek()
+# Approximate start time of playback
+# The getPlayPosition is in units of 1/90000s
+#
+                    secs_in = seek.getPlayPosition()[1]/90000
+                    begin = int(time.time() - secs_in)
                 else:
                     ename = self.My_Sref().getServiceName()
                     Servname = ename
@@ -807,6 +814,7 @@ Red: Refresh EPG
             pbinfo[epg_T] = ename
             pbinfo[epg_N] = Servname
             pbinfo[epg_D] = dur
+            pbinfo[epg_B] = begin
             self.list = [tuple(pbinfo)]
         else:
 # We'll get the same EPG (for the current channel) as would be displayed

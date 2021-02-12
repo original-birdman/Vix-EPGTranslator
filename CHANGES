@@ -274,3 +274,7 @@ Skin_small.py
 plugin.py
     Make icon locations relative to the script, rather than hardwiring
     full pathnames.
+
+plugin.py
+    For a playback, set the begin time to when the programme started
+    during playback (rather than None).
