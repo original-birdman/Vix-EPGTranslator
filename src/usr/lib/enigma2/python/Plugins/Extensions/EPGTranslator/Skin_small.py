@@ -7,16 +7,16 @@ class MySkinData:
 # class translatorConfig bits
 #
     translatorConfig_skin = """
-        <screen position="center,center" size="811,525" backgroundColor="#20000000" title="EPG Translator Setup">
+        <screen position="center,center" size="811,575" backgroundColor="#20000000" title="EPG Translator Setup">
             <ePixmap position="133,0" size="545,50" pixmap="{plug_loc}/pic/translatorConfig.png" alphatest="blend" zPosition="1" />
             <ePixmap position="70,59" size="671,1" pixmap="{plug_loc}/pic/separator.png" alphatest="off" zPosition="1" />
-            <widget name="config" position="10,60" size="658,182" itemHeight="38" scrollbarMode="showOnDemand" font="Regular;24" secondfont="Regular;24" zPosition="1" />
-            <ePixmap position="70,244" size="671,1" pixmap="{plug_loc}/pic/separator.png" alphatest="off" zPosition="1" />
-            <ePixmap position="210,254" size="18,18" pixmap="{plug_loc}/pic/buttons/green.png" alphatest="blend" zPosition="1" />
-            <ePixmap position="525,254" size="18,18" pixmap="{plug_loc}/pic/buttons/red.png" alphatest="blend" zPosition="1" />
-            <eLabel position="235,253" size="180,26" font="Regular;24" halign="left" text="Save" transparent="1" zPosition="1" />
-            <eLabel position="550,253" size="180,26" font="Regular;24" halign="left" text="Cancel" transparent="1" zPosition="1" />
-            <widget name="flag" position="261,250" size="288,288" alphatest="blend" zPosition="1" />
+            <widget name="config" position="10,60" size="780,197" itemHeight="38" scrollbarMode="showOnDemand" font="Regular;24" secondfont="Regular;24" zPosition="1" />
+            <ePixmap position="70,260" size="671,1" pixmap="{plug_loc}/pic/separator.png" alphatest="off" zPosition="1" />
+            <ePixmap position="210,270" size="18,18" pixmap="{plug_loc}/pic/buttons/green.png" alphatest="blend" zPosition="1" />
+            <ePixmap position="525,270" size="18,18" pixmap="{plug_loc}/pic/buttons/red.png" alphatest="blend" zPosition="1" />
+            <eLabel position="235,269" size="180,26" font="Regular;24" halign="left" text="Save" transparent="1" zPosition="1" />
+            <eLabel position="550,269" size="180,26" font="Regular;24" halign="left" text="Cancel" transparent="1" zPosition="1" />
+            <widget name="flag" position="261,280" size="288,288" alphatest="blend" zPosition="1" />
         </screen>
         """
 

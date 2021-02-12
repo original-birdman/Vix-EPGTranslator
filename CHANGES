@@ -278,3 +278,10 @@ plugin.py
 plugin.py
     For a playback, set the begin time to when the programme started
     during playback (rather than None).
+
+Skin_medium.py
+Skin_small.py
+plugin.py
+    Add an option to display a traceback of an error during translation,
+    rather than just the description.
+    Fixed up skins for this (and fixed Skin_small layout).

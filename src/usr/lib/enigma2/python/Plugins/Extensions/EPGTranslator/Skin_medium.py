@@ -10,13 +10,13 @@ class MySkinData:
         <screen position="center,center" size="1218,788" backgroundColor="#20000000" title="EPG Translator Setup">
             <ePixmap position="200,0" size="818,75" pixmap="{plug_loc}/pic/fhd-translatorConfig.png" alphatest="blend" zPosition="1" />
             <ePixmap position="110,89" size="998,1" pixmap="{plug_loc}/pic/separator.png" alphatest="off" zPosition="1" />
-            <widget name="config" position="15,90" size="1188,268" itemHeight="57" scrollbarMode="showOnDemand" font="Regular;36" secondfont="Regular;36" zPosition="1" />
-            <ePixmap position="110,369" size="998,1" pixmap="{plug_loc}/pic/separator.png" alphatest="off" zPosition="1" />
-            <ePixmap position="318,384" size="27,27" pixmap="{plug_loc}/pic/buttons/fhd-green.png" alphatest="blend" zPosition="1" />
-            <ePixmap position="795,384" size="27,27" pixmap="{plug_loc}/pic/buttons/fhd-red.png" alphatest="blend" zPosition="1" />
-            <eLabel position="355,383" size="270,40" font="Regular;36" halign="left" text="Save" transparent="1" zPosition="1" />
-            <eLabel position="833,383" size="270,40" font="Regular;36" halign="left" text="Cancel" transparent="1" zPosition="1" />
-            <widget name="flag" position="464,450" size="288,288" alphatest="blend" zPosition="1" />
+            <widget name="config" position="15,90" size="1188,290" itemHeight="57" scrollbarMode="showOnDemand" font="Regular;36" secondfont="Regular;36" zPosition="1" />
+            <ePixmap position="110,390" size="998,1" pixmap="{plug_loc}/pic/separator.png" alphatest="off" zPosition="1" />
+            <ePixmap position="318,405" size="27,27" pixmap="{plug_loc}/pic/buttons/fhd-green.png" alphatest="blend" zPosition="1" />
+            <ePixmap position="795,405" size="27,27" pixmap="{plug_loc}/pic/buttons/fhd-red.png" alphatest="blend" zPosition="1" />
+            <eLabel position="355,414" size="270,40" font="Regular;36" halign="left" text="Save" transparent="1" zPosition="1" />
+            <eLabel position="833,414" size="270,40" font="Regular;36" halign="left" text="Cancel" transparent="1" zPosition="1" />
+            <widget name="flag" position="464,460" size="288,288" alphatest="blend" zPosition="1" />
         </screen>
         """
 

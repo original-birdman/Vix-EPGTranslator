@@ -6,7 +6,7 @@ from __future__ import print_function
 EPGTrans_vers = "2.02-rc1"
 
 from Components.ActionMap import ActionMap
-from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, getConfigListEntry
+from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, ConfigBoolean, getConfigListEntry
 from Components.ConfigList import ConfigListScreen
 from Components.Label import Label
 from Components.Language import language
@@ -23,7 +23,8 @@ from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Tools.Directories import fileExists
 
-import sys, re, time, os
+import sys, re, time, os, traceback
+import inspect, os.path
 
 from .AutoflushCache import AutoflushCache
 from .HTML5Entities import name2codepoint
@@ -114,6 +115,7 @@ CfgPlTr.destination = ConfigSelection(default='en', choices=langs)
 CfgPlTr.timeout_hr = ConfigInteger(0, (0, 350))
 CfgPlTr.showsource = ConfigSelection(default='yes',
  choices=[('yes', _('Yes')), ('no', _('No'))])
+CfgPlTr.showtrace = ConfigBoolean(default=False)
 
 # Now we have the config vars, create an AutoflushCache to hold the
 # translations. We are storing tuples, so give a suitable null_return
@@ -146,10 +148,9 @@ def applySkinVars(skin, dict):
             print(e, '@key=', key)
     return skin
 
-# We need to know where we are to find the files relative to theis
+# We need to know where we are to find the files relative to this
 # script. Can't do this until we've defined a piece of code/object.
 #
-import inspect, os.path
 plugin_location = os.path.dirname(inspect.getsourcefile(applySkinVars))
 
 # Translate HTML Entities (&xxx;) in text
@@ -404,7 +405,8 @@ class translatorConfig(ConfigListScreen, Screen):
             getConfigListEntry(_('Source Language:'), CfgPlTr.source),
             getConfigListEntry(_('Destination Language:'), CfgPlTr.destination),
             getConfigListEntry(_('Cache timeout hours (0 == while valid):'), CfgPlTr.timeout_hr),
-            getConfigListEntry(_('Show Source EPG:'), CfgPlTr.showsource)
+            getConfigListEntry(_('Show Source EPG:'), CfgPlTr.showsource),
+            getConfigListEntry(_('Show traceback in errors:'), CfgPlTr.showtrace),
         ]
         ConfigListScreen.__init__(self, list, on_change=self.UpdateComponents)
         self['actions'] = ActionMap(['OkCancelActions', 'ColorActions'],
@@ -738,6 +740,7 @@ Red: Refresh EPG
                         AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
                     except Exception as e:  # Use originals on a failure...
                         print("[EPGTranslator-Plugin] translateEPG error:", e)
+                        if (CfgPlTr.showtrace): traceback.print_exc()
                         (t_title, t_descr) = (title, descr)
 
 # We now have the title+descr and t_title+t_descr to display
@@ -1042,6 +1045,7 @@ def My_setEvent(self, event):
             AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
         except Exception as e:
             print("[EPGTranslator-Plugin] My_setEvent error:", e)
+            if (CfgPlTr.showtrace): traceback.print_exc()
             return      # Do nothing on any failure
 
 # We have a set of translations now.
