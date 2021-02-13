@@ -285,3 +285,7 @@ plugin.py
     Add an option to display a traceback of an error during translation,
     rather than just the description.
     Fixed up skins for this (and fixed Skin_small layout).
+
+plugin.py
+    Change config.x.x.value usage to config.x.x.getValue(). OpenPLi
+    make config.epg.histminutes.value a str, not an int.

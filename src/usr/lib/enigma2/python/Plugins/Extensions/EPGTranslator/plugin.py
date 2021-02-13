@@ -120,7 +120,7 @@ CfgPlTr.showtrace = ConfigBoolean(default=False)
 # Now we have the config vars, create an AutoflushCache to hold the
 # translations. We are storing tuples, so give a suitable null_return
 #
-AfCache = AutoflushCache(CfgPlTr.timeout_hr.value, null_return=(None, None))
+AfCache = AutoflushCache(CfgPlTr.timeout_hr.getValue(), null_return=(None, None))
 
 # Get the skin settings etc. that are dependent on screen size.
 # If the screen size isn't (always a) constant between Vix start-ups
@@ -306,12 +306,12 @@ def DO_translation(text, source, dest):     # source, dest are langs
 # Create a reference key for the cache.
 # Done in one place to ensure consistency.
 # Not a class method as it is called from multiple classes
-# (Can't set lang=CfgPlTr.destination.value in the def() as that
+# (Can't set lang=CfgPlTr.destination.getValue() in the def() as that
 # only gets evaluated once at set-up)
 #
 def make_uref(sv_id, sv_name, lang=None):
     if lang == None:
-        lang=CfgPlTr.destination.value
+        lang=CfgPlTr.destination.getValue()
     return ":".join([lang, str(sv_id), str(sv_name)])
 
 def lang_flag(lang):    # Where the language images are
@@ -420,10 +420,10 @@ class translatorConfig(ConfigListScreen, Screen):
         self.onLayoutFinish.append(self.UpdateComponents)
 
     def UpdateComponents(self):
-        png = lang_flag(str(CfgPlTr.destination.value))
+        png = lang_flag(str(CfgPlTr.destination.getValue()))
         if fileExists(png):
             self['flag'].instance.setPixmapFromFile(png)
-        AfCache.change_timeout(CfgPlTr.timeout_hr.value)
+        AfCache.change_timeout(CfgPlTr.timeout_hr.getValue())
 
     def save(self):
         for x in self['config'].list:
@@ -470,7 +470,7 @@ Red: Refresh EPG
     def __init__(self, session, text):
         global plugin_location
 
-        self.showsource = CfgPlTr.showsource.value
+        self.showsource = CfgPlTr.showsource.getValue()
         if self.showsource == 'yes':    size = MySD.tMyes
         else:                           size = MySD.tMno
 
@@ -505,7 +505,7 @@ Red: Refresh EPG
 # Add the helptext for the environment language and default destination
 # now
         env_lang_base = language.getLanguage().partition("_")[0]
-        for lang in (env_lang_base, CfgPlTr.destination.value):
+        for lang in (env_lang_base, CfgPlTr.destination.getValue()):
             if lang not in self.helptext:
                 self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
 
@@ -569,8 +569,8 @@ Red: Refresh EPG
 # Set the current country flags as the screen displays
 #
     def onLayoutFinished(self):
-        source = lang_flag(CfgPlTr.source.value)
-        destination = lang_flag(CfgPlTr.destination.value)
+        source = lang_flag(CfgPlTr.source.getValue())
+        destination = lang_flag(CfgPlTr.destination.getValue())
         if self.showsource == 'yes':
             if fileExists(source):
                 self['flag'].instance.setPixmapFromFile(source)
@@ -620,9 +620,9 @@ Red: Refresh EPG
 #
     def get_translation(self, text, from_lg=None, to_lg=None):
         if from_lg != None: source = from_lg
-        else:               source = CfgPlTr.source.value
+        else:               source = CfgPlTr.source.getValue()
         if to_lg != None:   dest = to_lg
-        else:               dest = CfgPlTr.destination.value
+        else:               dest = CfgPlTr.destination.getValue()
         return DO_translation(text, source, dest)
 
 # For both translate* calls we strip() any text we are given (consistency)
@@ -717,7 +717,7 @@ Red: Refresh EPG
 # But ignore props for an rtol language, as it will mess them up (may
 # be messed up anyway, but no need to ensure it).
 #
-                            if CfgPlTr.destination.value not in rtol:
+                            if CfgPlTr.destination.getValue() not in rtol:
                                 if prepend_props:
                                     t_descr = prop + t_descr
                                 else:
@@ -733,9 +733,9 @@ Red: Refresh EPG
                         if self.event[epg_B] == None:   # A recording
                             to = int(time.time() + 10800)
                         else:
-                            to = int(self.event[epg_B] + self.event[epg_D] + 60*config.epg.histminutes.value)
-                        if CfgPlTr.timeout_hr.value > 0:
-                            limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
+                            to = int(self.event[epg_B] + self.event[epg_D] + 60*config.epg.histminutes.getValue())
+                        if CfgPlTr.timeout_hr.getValue() > 0:
+                            limit = int(time.time() + 3600*CfgPlTr.timeout_hr.getValue())
                             if limit < to:  to = limit
                         AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
                     except Exception as e:  # Use originals on a failure...
@@ -825,7 +825,7 @@ Red: Refresh EPG
 # We'll remember everything returned by lookupEvent()
 #
             t_now = int(time.time())
-            epg_base = t_now - 60*int(config.epg.histminutes.value)
+            epg_base = t_now - 60*int(config.epg.histminutes.getValue())
             epg_extent = 86400*14   # Get up to 14 days from now
             test = [ EPG_OPTIONS, (self.My_Sref().toCompareString(), 0, epg_base, epg_extent) ]
             epgcache = eEPGCache.getInstance()
@@ -903,13 +903,13 @@ Red: Refresh EPG
 # Use our translation code to get this from the English
 #
         env_lang = language.getLanguage()[:2]
-        for lang in (env_lang, CfgPlTr.destination.value):
+        for lang in (env_lang, CfgPlTr.destination.getValue()):
             if lang not in self.helptext:
                 self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
         text = "EPG Translator version: " + EPGTrans_vers
         text += "\n\n" + self.helptext[env_lang]
-        if self.helptext[env_lang] != self.helptext[CfgPlTr.destination.value]:
-            text += "\n\n" + self.helptext[CfgPlTr.destination.value]
+        if self.helptext[env_lang] != self.helptext[CfgPlTr.destination.getValue()]:
+            text += "\n\n" + self.helptext[CfgPlTr.destination.getValue()]
         self.session.open(MessageBox, text, MessageBox.TYPE_INFO, close_on_any_key=True)
 
     def config(self):
@@ -921,7 +921,7 @@ Red: Refresh EPG
             while count >= 0:
                 if self.hideflag:   wv = count      # 40 -> 0
                 else:               wv = 40 - count # 0 -> 40
-                f.write('%i' % (config.av.osd_alpha.value * wv / 40))
+                f.write('%i' % (config.av.osd_alpha.getValue() * wv / 40))
                 f.flush()               # So it does something
                 count -= 1
         self.hideflag = not self.hideflag
@@ -929,7 +929,7 @@ Red: Refresh EPG
     def exit(self):
         if self.hideflag == False:
             with open('/proc/stb/video/alpha', 'w') as f:
-                f.write('%i' % config.av.osd_alpha.value)
+                f.write('%i' % config.av.osd_alpha.getValue())
         self.close()
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
@@ -1015,8 +1015,8 @@ def My_setEvent(self, event):
 #
             r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
             t_text = DO_translation(r_text,
-                 str(CfgPlTr.source.value),
-                 str(CfgPlTr.destination.value)
+                 str(CfgPlTr.source.getValue()),
+                 str(CfgPlTr.destination.getValue())
                 )
             (t_sep, t_rest) = t_text.split("\n", 1)
             (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
@@ -1025,7 +1025,7 @@ def My_setEvent(self, event):
 # But ignore them for an rtol language, as it will mess them up (may
 # be messed up anyway, but no need to ensure it).
 #
-                if CfgPlTr.destination.value not in rtol:
+                if CfgPlTr.destination.getValue() not in rtol:
                     if prepend_props:
                         t_descr = prop + t_descr
                     else:
@@ -1038,9 +1038,9 @@ def My_setEvent(self, event):
 # But even a specific timeout should not extend beyond programme
 # validity.
 #
-            to = int(event.getBeginTime() + event.getDuration() + 60*config.epg.histminutes.value)
-            if CfgPlTr.timeout_hr.value > 0:
-                limit = int(time.time() + 3600*CfgPlTr.timeout_hr.value)
+            to = int(event.getBeginTime() + event.getDuration() + 60*config.epg.histminutes.getValue())
+            if CfgPlTr.timeout_hr.getValue() > 0:
+                limit = int(time.time() + 3600*CfgPlTr.timeout_hr.getValue())
                 if limit < to:  to = limit
             AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
         except Exception as e:
