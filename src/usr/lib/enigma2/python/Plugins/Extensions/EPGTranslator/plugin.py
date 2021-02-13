@@ -567,12 +567,10 @@ Red: Refresh EPG
         if 'en' not in self.helptext:
             self.helptext['en'] = self.base_helptext.strip()
 
-# Add the helptext for the environment language and default destination
-# now
-        env_lang_base = language.getLanguage().partition("_")[0]
-        for lang in (env_lang_base, CfgPlTr.destination.getValue()):
-            if lang not in self.helptext:
-                self.helptext[lang] = DO_translation(self.helptext['en'], 'en', lang)
+# Add the helptext for the default destination now
+        lang = CfgPlTr.destination.getValue()
+        if lang not in self.helptext:
+            self.helptext[lang] = DO_translation(self.helptext['en'], 'en', lang)
 
         AMbindings = {
          'ok': self.get_text,
@@ -923,18 +921,13 @@ Red: Refresh EPG
             InfoBar.zapDown(InfoBar.instance)
 
     def showHelp(self):
-# Display the help in the current environment and destination language
-# (but only show once if these are the same text)
-# Use our translation code to get this from the English
+# Display the help in the destination language
+# Use our translation code to get this from the English if required.
 #
-        env_lang = language.getLanguage()[:2]
-        for lang in (env_lang, CfgPlTr.destination.getValue()):
-            if lang not in self.helptext:
-                self.helptext[lang] = self.get_translation(self.helptext['en'], 'en', lang)
-        text = "EPG Translator version: " + EPGTrans_vers
-        text += "\n\n" + self.helptext[env_lang]
-        if self.helptext[env_lang] != self.helptext[CfgPlTr.destination.getValue()]:
-            text += "\n\n" + self.helptext[CfgPlTr.destination.getValue()]
+        lang = CfgPlTr.destination.getValue()
+        if lang not in self.helptext:
+            self.helptext[lang] = DO_translation(self.helptext['en'], 'en', lang)
+        text = "EPG Translator version: " + EPGTrans_vers + "\n\n" + self.helptext[lang]
         self.session.open(MessageBox, text, MessageBox.TYPE_INFO, close_on_any_key=True)
 
     def config(self):

@@ -304,3 +304,6 @@ plugin.py
     getEventId, which is usually there.
     Save two start times for a playback.  The original recording time
     (for display) and the starting playback time (for cacheing).
+
+plugin.py
+    Only show help in the configured destination language.
