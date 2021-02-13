@@ -499,8 +499,7 @@ Red: Refresh EPG
 # This ensures it gets added with the same newline spacing as any other
 # language
         if 'en' not in self.helptext:
-            self.helptext['en'] = self.get_translation(self.base_helptext,
-                 from_lg='en', to_lg='en')
+            self.helptext['en'] = self.base_helptext.strip()
 
 # Add the helptext for the environment language and default destination
 # now
@@ -635,6 +634,10 @@ Red: Refresh EPG
             return
         text = text.strip()
         self.setTitle('Text Translator')
+# Set the time field to something useful.
+# It is just a text label.
+#
+        self['timing'].setText("On-line translation")
         newtext = self.get_translation(text)
         if self.showsource == 'yes':
             self['text'].setText(text)

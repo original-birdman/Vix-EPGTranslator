@@ -289,3 +289,8 @@ plugin.py
 plugin.py
     Change config.x.x.value usage to config.x.x.getValue(). OpenPLi
     make config.epg.histminutes.value a str, not an int.
+
+plugin.py
+    Just strip-copy the English base_helptext into helptext.
+    Change the "timing" heading for a manual text translation to note it
+    is a translation - not related to the current event timing.
