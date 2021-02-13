@@ -6,14 +6,16 @@ from __future__ import print_function
 EPGTrans_vers = "2.02-rc1"
 
 from Components.ActionMap import ActionMap
-from Components.config import config, configfile, ConfigSubsection, ConfigSelection, ConfigInteger, ConfigBoolean, getConfigListEntry
+from Components.config import (config, configfile, ConfigSubsection,
+ ConfigSelection, ConfigInteger, ConfigBoolean, getConfigListEntry)
 from Components.ConfigList import ConfigListScreen
 from Components.Label import Label
 from Components.Language import language
 from Components.Pixmap import Pixmap
 from Components.ScrollLabel import ScrollLabel
 from Components.ServiceEventTracker import ServiceEventTracker
-from enigma import eEPGCache, eServiceReference, getDesktop, iPlayableService, iServiceInformation
+from enigma import (eEPGCache, eServiceReference, getDesktop,
+ iPlayableService, iServiceInformation)
 from Plugins.Plugin import PluginDescriptor
 from Screens.EpgSelection import EPGSelection
 from Screens.EventView import EventViewBase
@@ -70,6 +72,7 @@ for i in list(range(len(EPG_OPTIONS))):
     if EPG_OPTIONS[i] == 'X': continue
     exec("epg_%s = %d" % (EPG_OPTIONS[i], ci))
     ci += 1
+epg_PB = ci # Extra index for Begin Playback time.
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 # Configuration settings.
@@ -222,7 +225,7 @@ for c in ([" ", "\n", "\t"]):   # Actually .<ws>
     enc_space = enc_space + nenc_sep + quote(c)
     nenc_sep = '|'
 
-# The routine to actually sort out the translate of the text.
+# The routine to actually sort out the translation of the text.
 # This is NOT an object method, so that it can be called from "anywhere"
 # This routine expects to get normal ("raw") text and will return the
 # same.
@@ -302,6 +305,77 @@ def DO_translation(text, source, dest):     # source, dest are langs
             check_end = False
 
     return res.strip()
+
+# We need to translate the title and description.
+#
+# A string to use as a separator when the title and description are
+# combined for a one-call translation.
+# The idea is that it should be unchanged by the translation, but the
+# code does attempt to handle things even if it is changed.
+#
+sepline = "=========="
+
+def EPGdata_translate(title, descr, start, duration, uref):
+# Some descriptions (e.g. UK Freeview) can contain "properties" in [] at
+# the end.  And so [S,AD] (subtitles, audio-description) end up being
+# translated (e.g. for en -> de [S,AD] -> [TRAURIG]).
+# So strip any such trailers before sending for translation then append
+# them to the result.
+#
+    (desc, prop, prepend_props) = split_off_props(descr)
+
+# We wish to translate the title and description in one call
+# So we:
+#   send sepline\n+title+\nsepline\n+desc
+#   take the first line of what comes back
+#   split the rest into two based on that first line
+#
+    r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
+    t_text = DO_translation(r_text, CfgPlTr.source.getValue(), CfgPlTr.destination.getValue())
+
+# If this doesn't come back starting with sepline, we have an error
+#
+    if t_text[:len(sepline)] != sepline:
+        t_title = "Translation error"
+        t_descr = t_text
+    else:
+        try:
+            (t_sep, t_rest) = t_text.split("\n", 1)
+            (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
+            if prop != "":
+# prop will contain the "correct" trailing/whitespace
+# But ignore props for an rtol language, as it will mess them up (may
+# be messed up anyway, but no need to ensure it).
+#
+                if CfgPlTr.destination.getValue() not in rtol:
+                    if prepend_props:
+                        t_descr = prop + t_descr
+                    else:
+                        t_descr = t_descr + prop
+
+# Work out a timeout for the result.
+# If we have a specific timeout (in hours) use it, but if this is 0 set
+# the timeout to when the programme will leave the EPG.
+# But even a specific timeout should not extend beyond programme
+# validity.
+# A recording playback have a PlayBack begin time, which we want to
+# use as a cache basis (it's original start time being useless for
+# this).
+#
+            if start == None:   # A non-native recording?
+                to = int(time.time() + 10800)
+            else:
+                to = int(start + duration + 60*config.epg.histminutes.getValue())
+            if CfgPlTr.timeout_hr.getValue() > 0:
+                limit = int(time.time() + 3600*CfgPlTr.timeout_hr.getValue())
+                if limit < to:  to = limit
+            AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
+        except Exception as e:  # Use originals on a failure...
+            print("[EPGTranslator-Plugin] translateEPG error:", e)
+            if (CfgPlTr.showtrace,getValue()): traceback.print_exc()
+            (t_title, t_descr) = (title, descr)
+
+    return (t_title, t_descr)
 
 # Create a reference key for the cache.
 # Done in one place to ensure consistency.
@@ -442,13 +516,6 @@ class translatorConfig(ConfigListScreen, Screen):
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 
-# A string to use as a separator when the title and description are
-# combined for a one-call translation.
-# The idea is that it should be unchanged by the translation, but the
-# code does attempt to handle things even if it is changed.
-#
-sepline = "=========="
-
 class translatorMain(Screen):
 
 # Create the helptext as a class variable
@@ -496,8 +563,7 @@ Red: Refresh EPG
         self['label2'] = Label('= Clear cache')
 
 # Add the English (base) helptext if it is not there.
-# This ensures it gets added with the same newline spacing as any other
-# language
+#
         if 'en' not in self.helptext:
             self.helptext['en'] = self.base_helptext.strip()
 
@@ -506,7 +572,7 @@ Red: Refresh EPG
         env_lang_base = language.getLanguage().partition("_")[0]
         for lang in (env_lang_base, CfgPlTr.destination.getValue()):
             if lang not in self.helptext:
-                self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
+                self.helptext[lang] = DO_translation(self.helptext['en'], 'en', lang)
 
         AMbindings = {
          'ok': self.get_text,
@@ -529,7 +595,7 @@ Red: Refresh EPG
 # The playback state is also needed for getEPG(), so save it.
 # Do NOT use:
 #   self.session.nav.getCurrentlyPlayingServiceOrGroup().isPlayback()
-# as the test as that isPlayback() is Vix-specific
+# as that isPlayback() is Vix-specific. So just replicate the code here.
 #
         self.inPlayBack = "0:0:0:0:0:0:0:0:0" in self.My_Sref().toCompareString()
 
@@ -614,16 +680,6 @@ Red: Refresh EPG
         AfCache.purge()
         self.session.open(MessageBox, _('Cache cleared'), MessageBox.TYPE_INFO, close_on_any_key=True)
 
-# Routine to get the actual translation of the given text
-# We are allowed to force the source or destination language...
-#
-    def get_translation(self, text, from_lg=None, to_lg=None):
-        if from_lg != None: source = from_lg
-        else:               source = CfgPlTr.source.getValue()
-        if to_lg != None:   dest = to_lg
-        else:               dest = CfgPlTr.destination.getValue()
-        return DO_translation(text, source, dest)
-
 # For both translate* calls we strip() any text we are given (consistency)
 
 # Translate the text (entered via a VirtualKeyboard)
@@ -638,7 +694,7 @@ Red: Refresh EPG
 # It is just a text label.
 #
         self['timing'].setText("On-line translation")
-        newtext = self.get_translation(text)
+        newtext = DO_translation(text, CfgPlTr.source.getValue(), CfgPlTr.destination.getValue())
         if self.showsource == 'yes':
             self['text'].setText(text)
             self['text2'].setText(newtext)
@@ -661,9 +717,9 @@ Red: Refresh EPG
         if (title == '') and (descr == ''): # Don't display nothing
             return
 
-# We don't set epg_B for a recording, so this will drop to the exception
-# Also, add begin/duration spacing newlines here, so there are none
-# if we hit the exception.
+# We might not have set epg_B for a recording, so this will drop to the
+# exception. Also, add begin/duration spacing newlines here, so there
+# are none if we hit the exception.
 #
         try:
             begin=time.strftime("%Y-%m-%d %H:%M", time.localtime(int(self.event[epg_B])))
@@ -687,64 +743,13 @@ Red: Refresh EPG
 #
             uref = make_uref(self.event[epg_I], self.event[epg_N])
             (t_title, t_descr) = AfCache.fetch(uref)
-            if t_descr == None:   # Not there...
-# We need to translate the description.
-# Some descriptions (e.g. UK Freeview) can contain "properties" in [] at
-# the end.  And so [S,AD] (subtitles, audio-description) end up being
-# translated (e.g. for en -> de [S,AD] -> [TRAURIG]).
-# So strip any such trailers before sending for translation then append
-# them to the result.
-#
-                (desc, prop, prepend_props) = split_off_props(descr)
-
-# We wish to translate the title and description in one call
-# So we:
-#   send sepline\n+title+\nsepline\n+desc
-#   take the first line of what comes back
-#   split the rest into two based on that first line
-#
-                r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
-                t_text = self.get_translation(r_text)
-
-# If this doesn't come back starting with sepline, we have an error
-#
-                if t_text[:len(sepline)] != sepline:
-                    t_title = "Translation error"
-                    t_descr = t_text
-                else:
-                    try:
-                        (t_sep, t_rest) = t_text.split("\n", 1)
-                        (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
-                        if prop != "":
-# prop will contain the "correct" trailing/whitespace
-# But ignore props for an rtol language, as it will mess them up (may
-# be messed up anyway, but no need to ensure it).
-#
-                            if CfgPlTr.destination.getValue() not in rtol:
-                                if prepend_props:
-                                    t_descr = prop + t_descr
-                                else:
-                                    t_descr = t_descr + prop
-
-# Work out a timeout for the result.
-# If we have a specific timeout (in hours) use it, but if this is 0 set
-# the timeout to when the programme will leave the EPG.
-# But even a specific timeout should not extend beyond programme
-# validity.
-# Also handle a recording playback, which will have neither begin nor duration.
-#
-                        if self.event[epg_B] == None:   # A recording
-                            to = int(time.time() + 10800)
-                        else:
-                            to = int(self.event[epg_B] + self.event[epg_D] + 60*config.epg.histminutes.getValue())
-                        if CfgPlTr.timeout_hr.getValue() > 0:
-                            limit = int(time.time() + 3600*CfgPlTr.timeout_hr.getValue())
-                            if limit < to:  to = limit
-                        AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
-                    except Exception as e:  # Use originals on a failure...
-                        print("[EPGTranslator-Plugin] translateEPG error:", e)
-                        if (CfgPlTr.showtrace): traceback.print_exc()
-                        (t_title, t_descr) = (title, descr)
+            if t_descr == None: # Not there...
+                try:
+                    start = self.event[epg_PB]
+                except:
+                    start = self.event[epg_B]
+                (t_title, t_descr) = EPGdata_translate(title, descr,
+                     start, self.event[epg_D], uref)
 
 # We now have the title+descr and t_title+t_descr to display
 # None of the fields should have trailing newlines, so we should know
@@ -770,57 +775,74 @@ Red: Refresh EPG
         self.list = []
 
 # If we are in playback then there is no EPG cache related to it
-# So just fudge in a single entry for it - we've already disabled
-# channel-changing keys for this case
+# But some fields are still valid/consistent for an individual recording.
 #
         if self.inPlayBack:
             ssn = self.session.nav
-            path = ssn.getCurrentlyPlayingServiceOrGroup().getPath()
-            finfo = os.stat(path)
-            file_id = str(finfo.st_dev) + ":" + str(finfo.st_ino)
-# Now head towards the event...
             service = ssn.getCurrentService()
             info = service.info()
             curEvent = info.getEvent(0)     # 0 == NOW, 1 == NEXT
+
 # A downloaded file (from iPlayer - any mp4?) appears to have no
 # curEvent, so cater for this.
 # Set some default fields in case we fail for any reason...
 #
+            enedID = None
             short = ""
             extended = "Description unavailable"
             ename = "Unknown title"
             Servname = "Recording"
             dur = 0
-            begin = None
-            try:
-                if curEvent:
-                    short = curEvent.getShortDescription()
-                    extended = curEvent.getExtendedDescription()
-                    ename = curEvent.getEventName()
-                    Servname = ename
-                    dur = curEvent.getDuration()
-                    seek = service.seek()
+            rec_began = None
+            play_began = None
+            if curEvent:
+                try:    eventID = curEvent.getEventId()
+                except: pass
+                try:    short = curEvent.getShortDescription()
+                except: pass
+                try:    extended = curEvent.getExtendedDescription()
+                except: pass
+                try:    ename = curEvent.getEventName()
+                except: pass
+                Servname = ename
+                try:    dur = curEvent.getDuration()
+                except: pass
 # Approximate start time of playback
 # The getPlayPosition is in units of 1/90000s
+# BUT a playback has TWO start times.
+#   The start of the original recording (-> epg_B)
+#   The start of the playback (needed for cacheing timeout)
 #
+                try:
+                    seek = service.seek()
                     secs_in = seek.getPlayPosition()[1]/90000
-                    begin = int(time.time() - secs_in)
-                else:
-                    ename = self.My_Sref().getServiceName()
-                    Servname = ename
-            except:
-                pass
+                    play_began = int(time.time() - secs_in)
+                except:
+                    pass
+                try:    rec_began = curEvent.getBeginTime()
+                except: pass
+
+            if eventID == None:
+# Generate another unique ID instead.
+                try:
+                    path = ssn.getCurrentlyPlayingServiceOrGroup().getPath()
+                    finfo = os.stat(path)
+                    eventID = str(finfo.st_dev) + ":" + str(finfo.st_ino)
+                except:
+                    eventID = str(int(time.time()))
 
 # Create a list of the correct size with all elements None
 #
             pbinfo = [None]*(len(EPG_OPTIONS)-1)    # Ignoring X
-            pbinfo[epg_I] = file_id
+            pbinfo[epg_I] = eventID
             pbinfo[epg_S] = short
             pbinfo[epg_E] = extended
             pbinfo[epg_T] = ename
             pbinfo[epg_N] = Servname
             pbinfo[epg_D] = dur
-            pbinfo[epg_B] = begin
+            pbinfo[epg_B] = rec_began
+            if play_began != None:
+                pbinfo.append(play_began)   # epg_PB - and extra
             self.list = [tuple(pbinfo)]
         else:
 # We'll get the same EPG (for the current channel) as would be displayed
@@ -908,7 +930,7 @@ Red: Refresh EPG
         env_lang = language.getLanguage()[:2]
         for lang in (env_lang, CfgPlTr.destination.getValue()):
             if lang not in self.helptext:
-                self.helptext[lang] = self.get_translation(self.helptext['en'], from_lg='en', to_lg=lang)
+                self.helptext[lang] = self.get_translation(self.helptext['en'], 'en', lang)
         text = "EPG Translator version: " + EPGTrans_vers
         text += "\n\n" + self.helptext[env_lang]
         if self.helptext[env_lang] != self.helptext[CfgPlTr.destination.getValue()]:
@@ -992,64 +1014,9 @@ def My_setEvent(self, event):
 #
     uref = make_uref(event.getEventId(), self.currentService.getServiceName())
     (t_title, t_descr) = AfCache.fetch(uref)
-    if t_descr == None: # Not there...work out what it should be
-        try:            # Duck out having set nothing on an error...
-
-# You may need to lookup in EventBase.setEvent to see how these fields
-# are used and so how you can get the text to translate.
-# On all distros (ATV PLi Vix eight):
-#   o The current descr will have been put into the self["FullDescription"]
-#     ScrollLabel object in all distros.
-#   o The current title will have been set as the Title
-#
-# So get them from there and translate them
-# Where the translations actually needs to be installed is
-# version-dependent - see the end of this function.
-#
-            title = self.getTitle().strip()
-            descr = self["FullDescription"].getText().strip()
-            (desc, prop, prepend_props) = split_off_props(descr)
-
-# We wish to translate the title and description in one call
-# So we:
-#   send sepline+title+sepline+desc
-#   take the first line of what comes back
-#   split the rest into two based on that first line
-#
-            r_text = sepline + "\n" + title + "\n" + sepline + "\n" + desc
-            t_text = DO_translation(r_text,
-                 str(CfgPlTr.source.getValue()),
-                 str(CfgPlTr.destination.getValue())
-                )
-            (t_sep, t_rest) = t_text.split("\n", 1)
-            (t_title, t_descr) = t_rest.split("\n" + t_sep + "\n", 1)
-            if prop != "":
-# prop will contain the "correct" trailing/whitespace
-# But ignore them for an rtol language, as it will mess them up (may
-# be messed up anyway, but no need to ensure it).
-#
-                if CfgPlTr.destination.getValue() not in rtol:
-                    if prepend_props:
-                        t_descr = prop + t_descr
-                    else:
-                        t_descr = t_descr + prop
-
-# ...and add that to the cache
-#
-# If we have a specific timeout (in hours) use it, but if this is 0 set
-# the timeout to when the programme will leave the EPG
-# But even a specific timeout should not extend beyond programme
-# validity.
-#
-            to = int(event.getBeginTime() + event.getDuration() + 60*config.epg.histminutes.getValue())
-            if CfgPlTr.timeout_hr.getValue() > 0:
-                limit = int(time.time() + 3600*CfgPlTr.timeout_hr.getValue())
-                if limit < to:  to = limit
-            AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
-        except Exception as e:
-            print("[EPGTranslator-Plugin] My_setEvent error:", e)
-            if (CfgPlTr.showtrace): traceback.print_exc()
-            return      # Do nothing on any failure
+    if t_descr == None: # Not there...
+        (t_title, t_descr) = EPGdata_translate(title, descr,
+             event.getBeginTime(), event.getDuration(), uref)
 
 # We have a set of translations now.
 # Different skins use different fields for these data, so

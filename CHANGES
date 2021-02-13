@@ -294,3 +294,13 @@ plugin.py
     Just strip-copy the English base_helptext into helptext.
     Change the "timing" heading for a manual text translation to note it
     is a translation - not related to the current event timing.
+
+plugin.py
+    Added an EPGdata_translate() function to handle the common
+    translating code in translateEPG() and My_setEvent().
+    Removed get_translation() from translatorMain class and just use
+    DO_translation() directly.
+    In getEPG() get as much info for a playback as we can, including the
+    getEventId, which is usually there.
+    Save two start times for a playback.  The original recording time
+    (for display) and the starting playback time (for cacheing).
