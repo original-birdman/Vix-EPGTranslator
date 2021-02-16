@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
+s# -*- coding: utf-8 -*-
 #
 # So we can use Py3 print style
 from __future__ import print_function
 
-EPGTrans_vers = "2.02-rc1"
+EPGTrans_vers = "2.02-rc2"
 
 from Components.ActionMap import ActionMap
 from Components.config import (config, configfile, ConfigSubsection,
@@ -444,7 +444,7 @@ def EPGdata_translate(title, descr, start, duration, uref):
             AfCache.add(uref, (t_title, t_descr), abs_timeout=to)
         except Exception as e:  # Use originals on a failure...
             print("[EPGTranslator-Plugin] translateEPG error:", e)
-            if (CfgPlTr.showtrace,getValue()): traceback.print_exc()
+            if (CfgPlTr.showtrace.getValue()): traceback.print_exc()
             (t_title, t_descr) = (title, descr)
 
     return (t_title, t_descr)
