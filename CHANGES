@@ -324,3 +324,9 @@ control
 
 plugin.py
     Fix a typo in a variable name.
+
+control
+    Built ipk
+    Added the 2.02-rc2 tag to git
+
+==========
