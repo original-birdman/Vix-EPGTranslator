@@ -315,3 +315,9 @@ plugin.py
     Move split_of_props function code into EPGdata_translate() as
     it is now only used once from there.
     Add the short day-of-week to the time in the EPG browser.
+
+control
+    Built ipk
+    Added the 2.02-rc1 tag to git
+
+==========
