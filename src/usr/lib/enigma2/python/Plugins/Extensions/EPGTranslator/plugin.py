@@ -25,8 +25,7 @@ from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Tools.Directories import fileExists
 
-import sys, re, time, os, traceback
-import inspect, os.path
+import sys, re, time, os, traceback, inspect
 
 from .AutoflushCache import AutoflushCache
 from .HTML5Entities import name2codepoint
@@ -72,7 +71,7 @@ for i in list(range(len(EPG_OPTIONS))):
     if EPG_OPTIONS[i] == 'X': continue
     exec("epg_%s = %d" % (EPG_OPTIONS[i], ci))
     ci += 1
-epg_PB = ci # Extra index for Begin Playback time.
+epg_PB = ci # Extra index for Playback Begin time.
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 # Configuration settings.
@@ -139,6 +138,7 @@ else:
 # Global functions
 #
 
+# ==================================================================
 # Interpolate dynamic values using {xxx}.
 # Used for skins, where time formats may contain %H:%M etc...,
 # making % replacements a bit messy
@@ -151,11 +151,7 @@ def applySkinVars(skin, dict):
             print(e, '@key=', key)
     return skin
 
-# We need to know where we are to find the files relative to this
-# script. Can't do this until we've defined a piece of code/object.
-#
-plugin_location = os.path.dirname(inspect.getsourcefile(applySkinVars))
-
+# ==================================================================
 # Translate HTML Entities (&xxx;) in text
 # The standard python name2codepoint (in htmlentitydefs for Py2,
 # html.entities for Py3) is incomplete, so we'll use a complete
@@ -176,10 +172,15 @@ def transHTMLEnts(text):
     text = re.sub("&.{,30}?;", repl, text)
     return str(text)
 
+# ==================================================================
 # A function to make a call to Google translate
 # It may be dealing with only a sub-text of the original as
 # DO_translation() will be splitting and long text and making
 # multiple calls here.
+# Spilt from DO_translation() to make the code more readable, and hence
+# more easily maintained.
+# This is the only code to know about the Web call and structure of the
+# returned page.
 #
 def PART_translate(enc_text, source, dest):
 
@@ -213,6 +214,7 @@ def PART_translate(enc_text, source, dest):
         newtext = ''    # leaving failed as True
     return (failed, newtext)
 
+# ==================================================================
 # We need to split on ".<whitespace>" and "<whitespace>", whilst
 # remembering what the actual splitter was.
 # So create the text patterns once.
@@ -243,7 +245,7 @@ def DO_translation(text, source, dest):     # source, dest are langs
 
     enc_text = quote(text)
     enc_len = len(enc_text)
-    max = 7000              # Less than the actual ~7638
+    max = 7000              # Less than the actual ~7656 to 7707
     nsplit = int(enc_len/max) + 1
     bsize = int(enc_len/nsplit) - 10
 
@@ -306,8 +308,59 @@ def DO_translation(text, source, dest):     # source, dest are langs
 
     return res.strip()
 
-# We need to translate the title and description.
+# ==================================================================
+# Regular expressions to split off the [] or () properties from a
+# description. Used by EPGdata_translate().
 #
+# Make the props pattern usage depend on whether there is a [ within the
+# first 12 characters or a ] within the last 12.
+# For begin_props the last prop group must be [] (not ())
+# For end_props the first prop group must be [] (not ())
+#
+# This will capture one whitespace from *after* the last prop, only if
+# there is one.
+#
+# Also the compiled expression for the patterns.
+#
+
+# Patterns for matching [...] and (...)
+# Interpolated into the working patterns using %s (so look out for them -
+# do not confuse them with \s!)
+#
+sbk_prop = '\[[^\]]*\]'     # Square brackets
+par_prop = '\([^\)]*\)'     # Parentheses
+
+#
+begin_props = """
+^\s*                        # Strip any leading whitespace
+(                           # Start all [] + () groups saving
+ (?:                        # Start multi-groups
+  (?:(?:%s|%s)\s*)          # Either grouping + whitespace
+ )*                         # end a group - and repeat
+ %s                         # last group - []
+)                           # End all () or [] groups saving
+\s*                         # Skip any intervening whitespace
+(.*)                        # The real description
+\s*$                        # Strip trailing whitespace to EOL
+""" % (sbk_prop, par_prop, sbk_prop)
+begin_matcher = re.compile(begin_props, flags=re.X|re.S)
+
+end_props = """
+^\s*                        # Strip any leading whitespace
+(.*?)                       # The real description (? else it takes all)
+\s*                         # Skip any intervening whitespace
+(                           # Start all [] + () groups saving
+ %s                         # first group - []
+ \s*                        # Skip any intervening whitespace
+ (?:                        # Start multi-groups
+  (?:(?:%s|%s)\s*)          # Either grouping + whitespace
+ )*                         # end a group - and repeat
+ (?:\s*S\d+\s*Ep\d+)?       # UK ITV can have a trailing Sn Epn
+)                           # End all () or [] groups saving
+\s*$                        # Strip trailing whitespace to EOL
+""" % (sbk_prop, sbk_prop, par_prop)
+end_matcher = re.compile(end_props, flags=re.X|re.S)
+
 # A string to use as a separator when the title and description are
 # combined for a one-call translation.
 # The idea is that it should be unchanged by the translation, but the
@@ -315,14 +368,33 @@ def DO_translation(text, source, dest):     # source, dest are langs
 #
 sepline = "=========="
 
+# The actual code to translate the title and description.
+#
 def EPGdata_translate(title, descr, start, duration, uref):
-# Some descriptions (e.g. UK Freeview) can contain "properties" in [] at
+    global sepline, begin_matcher, end_matcher
+
+# Some descriptions (e.g. UK Freeview) may contain "properties" in [] at
 # the end.  And so [S,AD] (subtitles, audio-description) end up being
 # translated (e.g. for en -> de [S,AD] -> [TRAURIG]).
 # So strip any such trailers before sending for translation then append
 # them to the result.
 #
-    (desc, prop, prepend_props) = split_off_props(descr)
+    desc = descr.strip()
+    prop = ''
+    prepend_props = False
+# Only check for props if we actually have a description
+# Look for [ towards the beginning, to allow for an opening ()
+    if len(descr) > 0:
+        if '[' in descr[:12]:
+            res = re.findall(begin_matcher, descr)
+            if len(res) > 0:    # Only if findall succeeded
+                (prop, desc) = res[0]
+                prepend_props = True
+# Look for ] towards the end, to allow for UK ITV Sn Epn
+        elif ']' in descr[-12:]:
+            res = re.findall(end_matcher, descr)
+            if len(res) > 0:    # Only if findall succeeded
+                (desc, prop) = res[0]
 
 # We wish to translate the title and description in one call
 # So we:
@@ -358,8 +430,8 @@ def EPGdata_translate(title, descr, start, duration, uref):
 # the timeout to when the programme will leave the EPG.
 # But even a specific timeout should not extend beyond programme
 # validity.
-# A recording playback have a PlayBack begin time, which we want to
-# use as a cache basis (it's original start time being useless for
+# A recording playback may have a PlayBack begin time, which we want to
+# use as a cache basis (its original start time being useless for
 # this).
 #
             if start == None:   # A non-native recording?
@@ -377,97 +449,29 @@ def EPGdata_translate(title, descr, start, duration, uref):
 
     return (t_title, t_descr)
 
+# ==================================================================
 # Create a reference key for the cache.
 # Done in one place to ensure consistency.
 # Not a class method as it is called from multiple classes
-# (Can't set lang=CfgPlTr.destination.getValue() in the def() as that
-# only gets evaluated once at set-up)
 #
-def make_uref(sv_id, sv_name, lang=None):
-    if lang == None:
-        lang=CfgPlTr.destination.getValue()
-    return ":".join([lang, str(sv_id), str(sv_name)])
+def make_uref(sv_id, sv_name):
+    return ":".join([CfgPlTr.destination.getValue(), str(sv_id), str(sv_name)])
 
+# ==================================================================
+# We need to know where we are to find the files relative to this
+# script. Can't do this until we've defined a piece of code/object.
+#
+plugin_location = os.path.dirname(inspect.getsourcefile(applySkinVars))
 def lang_flag(lang):    # Where the language images are
     global plugin_location
     return plugin_location + '/pic/flag/' + lang  + '.png'
-
-# Regular expressions to split off the [] or () properties from a
-# description. Used from two different classes.
-#
-# Make the props pattern usage depend on whether there is a [ within the
-# first 12 characters or a ] within the last 12.
-# For begin_props the last prop group must be [] (not ())
-# For end_props the first prop group must be [] (not ())
-#
-# This will capture one whitespace from *after* the last prop, only if
-# there is one.
-#
-# Also the compiled expression for the patterns.
-#
-# Patterns for matching [...] and (...)
-# Interpolated into the working patterns using %s (so look out for them)
-#
-skb_prop = '\[[^\]]*\]'
-par_prop = '\([^\)]*\)'
-
-#
-begin_props = """
-^\s*                        # Strip any leading whitespace
-(                           # Start all [] + () groups saving
- (?:                        # Start multi-groups
-  (?:(?:%s|%s)\s*)          # Either grouping + whitespace
- )*                         # end a group - and repeat
- %s                         # last group - []
-)                           # End all () or [] groups saving
-\s*                         # Skip any intervening whitespace
-(.*)                        # The real description
-\s*$                        # Strip trailing whitespace to EOL
-""" % (skb_prop, par_prop, skb_prop)
-begin_matcher = re.compile(begin_props, flags=re.X|re.S)
-
-end_props = """
-^\s*                        # Strip any leading whitespace
-(.*?)                       # The real description (? else it takes all)
-\s*                         # Skip any intervening whitespace
-(                           # Start all [] + () groups saving
- %s                         # first group - []
- \s*                        # Skip any intervening whitespace
- (?:                        # Start multi-groups
-  (?:(?:%s|%s)\s*)          # Either grouping + whitespace
- )*                         # end a group - and repeat
- (?:\s*S\d+\s*Ep\d+)?       # UK ITV can have a trailing Sn Epn
-)                           # End all () or [] groups saving
-\s*$                        # Strip trailing whitespace to EOL
-""" % (skb_prop, skb_prop, par_prop)
-end_matcher = re.compile(end_props, flags=re.X|re.S)
-
-# The actual function that uses the regexes.
-#
-def split_off_props(descr):
-    desc = descr.strip()
-    prop = ''
-    prepend_props = False
-# Only check for props if we actually have a description
-# Look for [ towards the beginning, to allow for an opening ()
-    if len(descr) > 0:
-        if '[' in descr[:12]:
-            res = re.findall(begin_matcher, descr)
-            if len(res) > 0:    # Only if findall succeeded
-                (prop, desc) = res[0]
-                prepend_props = True
-# Look for ] towards the end, to allow for UK ITV Sn Epn
-        elif ']' in descr[-12:]:
-            res = re.findall(end_matcher, descr)
-            if len(res) > 0:    # Only if findall succeeded
-                (desc, prop) = res[0]
-    return (desc, prop, prepend_props)
 
 # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 # Our classes
 #
 class translatorConfig(ConfigListScreen, Screen):
 
+# ==================================================================
     def __init__(self, session):
         global plugin_location
 
@@ -493,23 +497,27 @@ class translatorConfig(ConfigListScreen, Screen):
         self.setTitle("EPG Translator Setup - " + EPGTrans_vers)
         self.onLayoutFinish.append(self.UpdateComponents)
 
+# ==================================================================
     def UpdateComponents(self):
         png = lang_flag(str(CfgPlTr.destination.getValue()))
         if fileExists(png):
             self['flag'].instance.setPixmapFromFile(png)
         AfCache.change_timeout(CfgPlTr.timeout_hr.getValue())
 
+# ==================================================================
     def save(self):
         for x in self['config'].list:
             x[1].save()
         configfile.save()
         self.exit()
 
+# ==================================================================
     def cancel(self):
         for x in self['config'].list:
             x[1].cancel()
         self.exit()
 
+# ==================================================================
     def exit(self):
         self.session.openWithCallback(self.close, translatorMain, None)
         return
@@ -533,7 +541,11 @@ Blue: Hide screen
 Yellow: Clear cache
 Red: Refresh EPG
 """
+# Add the English (base) helptext now
+#
+    helptext['en'] = base_helptext.strip()
 
+# ==================================================================
     def __init__(self, session, text):
         global plugin_location
 
@@ -561,11 +573,6 @@ Red: Refresh EPG
         self['text2'] = ScrollLabel('')
         self['label'] = Label('= Hide')
         self['label2'] = Label('= Clear cache')
-
-# Add the English (base) helptext if it is not there.
-#
-        if 'en' not in self.helptext:
-            self.helptext['en'] = self.base_helptext.strip()
 
 # Add the helptext for the default destination now
         lang = CfgPlTr.destination.getValue()
@@ -629,6 +636,7 @@ Red: Refresh EPG
              AMbindings, -1)
         self.onLayoutFinish.append(self.onLayoutFinished)
 
+# ==================================================================
 # Set the current country flags as the screen displays
 #
     def onLayoutFinished(self):
@@ -646,9 +654,10 @@ Red: Refresh EPG
         else:                   self.translateEPG(self.text, '')
         return
 
+# ==================================================================
 # When the service changes, get the EPG for it.
 # And update the channel name.
-
+#
     def __serviceTuned(self):
         wintitle = 'EPG Translator'
         try:
@@ -659,6 +668,7 @@ Red: Refresh EPG
         self.setTitle(wintitle)
         self.getEPG()
 
+# ==================================================================
 # Get the ServiceRef for the current object
 # We do this in several places
 #
@@ -667,11 +677,13 @@ Red: Refresh EPG
         info = service.info()
         return eServiceReference(info.getInfoString(iServiceInformation.sServiceref))
 
+# ==================================================================
 # Bound to OK key. Request text (via a VirtualKeyBoard) to translate.
 #
     def get_text(self):
         self.session.openWithCallback(self.translateText, VirtualKeyBoard, title='Text Translator:', text='')
 
+# ==================================================================
 # Clear the cache of all items
 #
     def clear_cache(self):
@@ -680,6 +692,7 @@ Red: Refresh EPG
 
 # For both translate* calls we strip() any text we are given (consistency)
 
+# ==================================================================
 # Translate the text (entered via a VirtualKeyboard)
 # and display it
 #
@@ -700,6 +713,7 @@ Red: Refresh EPG
             self['text'].setText(newtext)
             self['text2'].hide()
 
+# ==================================================================
 # Translate the text of an EPG description
 # and display it
 #
@@ -720,7 +734,7 @@ Red: Refresh EPG
 # are none if we hit the exception.
 #
         try:
-            begin=time.strftime("%Y-%m-%d %H:%M", time.localtime(int(self.event[epg_B])))
+            begin=time.strftime("%a %Y-%m-%d %H:%M", time.localtime(int(self.event[epg_B])))
         except:
             begin = ''
         if self.event[epg_D] > 0:
@@ -765,6 +779,7 @@ Red: Refresh EPG
             self['text'].setText(tr_text)
             self['text2'].hide()
 
+# ==================================================================
 # Populate the EPG data in self.list from the box's internal EPG cache
 #
     def getEPG(self):
@@ -864,6 +879,7 @@ Red: Refresh EPG
         self.showEPG()
         return
 
+# ==================================================================
 # Get the text and translate it for display
 #
     def showEPG(self):
@@ -890,6 +906,7 @@ Red: Refresh EPG
             extended = short
         self.translateEPG(title, extended)
 
+# ==================================================================
     def leftUp(self):
         self.count -= 1
 # Don't wrap....
@@ -897,6 +914,7 @@ Red: Refresh EPG
             self.count = 0
         self.showEPG()
 
+# ==================================================================
     def rightDown(self):
         self.count += 1
 # Don't wrap....
@@ -904,22 +922,27 @@ Red: Refresh EPG
             self.count = self.max - 1
         self.showEPG()
 
+# ==================================================================
     def up(self):
         self['text'].pageUp()
         self['text2'].pageUp()
 
+# ==================================================================
     def down(self):
         self['text'].pageDown()
         self['text2'].pageDown()
 
+# ==================================================================
     def zapUp(self):
         if InfoBar and InfoBar.instance:
             InfoBar.zapUp(InfoBar.instance)
 
+# ==================================================================
     def zapDown(self):
         if InfoBar and InfoBar.instance:
             InfoBar.zapDown(InfoBar.instance)
 
+# ==================================================================
     def showHelp(self):
 # Display the help in the destination language
 # Use our translation code to get this from the English if required.
@@ -930,9 +953,11 @@ Red: Refresh EPG
         text = "EPG Translator version: " + EPGTrans_vers + "\n\n" + self.helptext[lang]
         self.session.open(MessageBox, text, MessageBox.TYPE_INFO, close_on_any_key=True)
 
+# ==================================================================
     def config(self):
         self.session.openWithCallback(self.exit, translatorConfig)
 
+# ==================================================================
     def hideScreen(self):
         with open('/proc/stb/video/alpha', 'w') as f:
             count = 40
@@ -944,6 +969,7 @@ Red: Refresh EPG
                 count -= 1
         self.hideflag = not self.hideflag
 
+# ==================================================================
     def exit(self):
         if self.hideflag == False:
             with open('/proc/stb/video/alpha', 'w') as f:
@@ -961,7 +987,7 @@ Red: Refresh EPG
 orig_EVB__init__ = None
 orig_EVB_setEvent = None
 
-##################################################################
+# ==================================================================
 # Code to toggle whether we are translating.
 # Bound to Text in any EventView screen.
 #
@@ -976,7 +1002,7 @@ def EPGTr_ToggleMode(self):
 #
     self.setEvent(self.event)
 
-##################################################################
+# ==================================================================
 # The code to handle the text that will be displayed.
 # This is an extension to the EventViewbase.setEvent().
 #
@@ -1008,6 +1034,20 @@ def My_setEvent(self, event):
     uref = make_uref(event.getEventId(), self.currentService.getServiceName())
     (t_title, t_descr) = AfCache.fetch(uref)
     if t_descr == None: # Not there...
+
+# You may need to lookup in EventBase.setEvent to see how these fields
+# are used and so how you can get the text to translate.
+# On all distros (ATV PLi Vix eight):
+#   o The current descr will have been put into the
+#     self["FullDescription"] ScrollLabel object in all distros.
+#   o The current title will have been set as the Title
+#
+# So get them from there and translate them
+# Where the translations actually needs to be installed is
+# version-dependent - see the end of this function.
+#
+        title = self.getTitle().strip()
+        descr = self["FullDescription"].getText().strip()
         (t_title, t_descr) = EPGdata_translate(title, descr,
              event.getBeginTime(), event.getDuration(), uref)
 
@@ -1034,7 +1074,7 @@ def My_setEvent(self, event):
         self["FullDescription"].setText(t_descr)
     self.setTitle(t_title)
 
-##################################################################
+# ==================================================================
 # Intercepting code for EventViewBase __init__()
 # We add an ActionMap for text key binding.
 #
@@ -1058,7 +1098,7 @@ def My_EVB__init__(self, *args, **kwargs):
 #
     self.EPGTr_translating = False
 
-##################################################################
+# ==================================================================
 # Start-up links (see PluginDescriptor defs)
 # This gets the current setting of functions we intercept
 # (EventViewBase.__init__ EventViewBase.setEvent)
@@ -1094,12 +1134,14 @@ def autostart(reason, **kwargs):
     EventViewBase.EPGTr_ToggleMode = EPGTr_ToggleMode
 
 
+# ==================================================================
 # Where the Plugin starts when invoked via Plugins
 #
 def main(session, **kwargs):
     session.open(translatorMain, None)
     return
 
+# ==================================================================
 def Plugins(**kwargs):
     return [
      PluginDescriptor(name='EPG Translator', description='Translate your EPG', where=[PluginDescriptor.WHERE_PLUGINMENU], icon='plugin.png', fnc=main),

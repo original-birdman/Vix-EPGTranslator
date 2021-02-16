@@ -307,3 +307,11 @@ plugin.py
 
 plugin.py
     Only show help in the configured destination language.
+
+plugin.py
+    Code rationization and tidy-up.
+    Remove (unused) lang= parameter from make_uref()
+    Added visual comment separators before each def
+    Move split_of_props function code into EPGdata_translate() as
+    it is now only used once from there.
+    Add the short day-of-week to the time in the EPG browser.
