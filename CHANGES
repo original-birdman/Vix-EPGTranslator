@@ -330,3 +330,6 @@ control
     Added the 2.02-rc2 tag to git
 
 ==========
+
+plugin.py
+    Removed a stray leading "s" from the file (that came from nowhere).
